@@ -15,21 +15,37 @@ document.addEventListener("DOMContentLoaded", function () {
             content: function () {
                 const targetId = popoverTriggerEl.getAttribute("data-for");
                 const menu = document.querySelector(`.popover-menu[data-for="${targetId}"]`);
-                return menu ? menu.innerHTML : "No content";
+                if (menu) {
+                    const clone = menu.cloneNode(true);
+                    clone.classList.remove("d-none");
+
+                    clone.querySelectorAll("li").forEach(li => {
+                        li.addEventListener("click", () => {
+                            popover.hide();
+                        });
+                    });
+
+                    return clone;
+                }
+                return "No content";
             }
         });
 
+        // Close when clicking outside
         document.addEventListener("click", function (e) {
-            const currentPopover = document.querySelector(".popover.show");
-            if (
-                currentPopover &&
-                !currentPopover.contains(e.target) &&
-                !popoverTriggerEl.contains(e.target)
-            ) {
-                popover.hide();
+            const li = e.target.closest(".popover li");
+            if (li) {
+                const activePopover = document.querySelector(".popover.show");
+                if (activePopover) {
+                    bootstrap.Popover.getInstance(
+                        document.querySelector('[aria-describedby="' + activePopover.id + '"]')
+                    )?.hide();
+                }
             }
         });
+
     });
+
 
     // // ---- check meeting code (Stage 1) ----
     const joinForm = document.getElementById("joinMeetingForm");
@@ -336,6 +352,117 @@ document.addEventListener("DOMContentLoaded", function () {
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
     }
+
+
+// ---- Instant Meeting ----
+const instantForm = document.getElementById("instantMeetingForm");
+if (instantForm) {
+    instantForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const payload = {
+            name: document.getElementById("instantName").value,
+            designation: document.getElementById("instantDesignation").value
+        };
+
+        fetch("/start_instant_meeting/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById("instantMeetingModal"));
+                if (modal) modal.hide();
+
+                currentMeetingCode = data.meeting_code;
+                showToast("Instant meeting created!", "success");
+
+                // smooth transition redirect
+                showTransitionAndRedirect(`/meet_code/${currentMeetingCode}/`);
+            } else {
+                showToast("Failed to create instant meeting", "danger");
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast("Server error", "danger");
+        });
+    });
+}
+
+// ---- Schedule Meeting ----
+const scheduleForm = document.getElementById("scheduleMeetingForm");
+if (scheduleForm) {
+    scheduleForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const payload = {
+            name: document.getElementById("scheduleName").value,
+            designation: document.getElementById("scheduleDesignation").value,
+            time: document.getElementById("scheduleTime").value
+        };
+
+        fetch("/schedule_meeting/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const scheduleModal = bootstrap.Modal.getInstance(document.getElementById("scheduleMeetingModal"));
+                if (scheduleModal) scheduleModal.hide();
+
+                // Fill credentials modal
+                document.getElementById("credCode").textContent = data.meeting_code;
+                document.getElementById("credPassword").textContent = data.password;
+
+                const credModal = new bootstrap.Modal(document.getElementById("meetingCredentialsModal"));
+                credModal.show();
+
+                // Copy button
+                document.getElementById("copyCredentials").onclick = function () {
+                    const text = `Hey join my meeting by using the following:\n\nMeeting code: ${data.meeting_code}\nPassword: ${data.password}`;
+                    navigator.clipboard.writeText(text).then(() => {
+                        showToast("Copied to clipboard", "success");
+                    });
+                };
+
+                // "I understood" button
+                document.getElementById("understoodBtn").onclick = function () {
+                    // auto copy easter egg
+                    const text = `Hey join my meeting by using the following:\n\nMeeting code: ${data.meeting_code}\nPassword: ${data.password}`;
+                    navigator.clipboard.writeText(text);
+
+                    const credModalInstance = bootstrap.Modal.getInstance(document.getElementById("meetingCredentialsModal"));
+                    if (credModalInstance) credModalInstance.hide();
+
+                    // optional redirect back home
+                    window.location.href = "/";
+                };
+            } else {
+                showToast("Failed to schedule meeting", "danger");
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast("Server error", "danger");
+        });
+    });
+}
+
+
+
 
     function showTransitionAndRedirect(url) {
         const overlay = document.getElementById("transitionOverlay");

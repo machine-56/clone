@@ -1,3 +1,5 @@
+import random
+import string
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
 import json
@@ -77,3 +79,40 @@ def join_meeting(request):
         return JsonResponse({"success": False, "error": "invalid_data"})
     
     return JsonResponse({"success": False, "error": "invalid_method"}, status=405)
+
+
+def start_instant_meeting(request):
+    if request.method == "POST":
+        # TODO: later save to DB
+        meeting_code = generate_code()
+        password = generate_password()
+
+        return JsonResponse({
+            "success": True,
+            "meeting_code": meeting_code,
+            "password": password
+        })
+    return JsonResponse({"success": False, "error": "invalid_request"}, status=400)
+
+
+def schedule_meeting(request):
+    if request.method == "POST":
+        # TODO: later save to DB
+        meeting_code = generate_code()
+        password = generate_password()
+
+        return JsonResponse({
+            "success": True,
+            "meeting_code": meeting_code,
+            "password": password
+        })
+    return JsonResponse({"success": False, "error": "invalid_request"}, status=400)
+
+
+
+
+def generate_code(length=8):
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+def generate_password(length=6):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))

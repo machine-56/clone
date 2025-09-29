@@ -20,9 +20,14 @@
           Start a new meeting
         </button>
         <ul class="popover-menu list-unstyled d-none" data-for="meeting_options">
-          <li><i class="fa-solid fa-plus"></i> Start an instant meeting</li>
-          <li><i class="fa-solid fa-clock"></i> Schedule a meeting for later</li>
+          <li id="meeting_instant" data-bs-toggle="modal" data-bs-target="#instantMeetingModal">
+            <i class="fa-solid fa-plus"></i> Start an instant meeting
+          </li>
+          <li id="meeting_schedule" data-bs-toggle="modal" data-bs-target="#scheduleMeetingModal">
+            <i class="fa-solid fa-clock"></i> Schedule a meeting for later
+          </li>
         </ul>
+
 
         <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#joinMeetingModal">
           Join a new meeting
@@ -97,7 +102,7 @@
 
             <div class="text-end">
               <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal">Cancel</button>
-              <button type="submit" class="btn btn-outline-success">Join</button>
+              <button type="submit" class="btn btn-outline-success w-100">Join</button>
             </div>
           </form>
         </div>
@@ -132,6 +137,90 @@
     </div>
   </div>
 </div>
+
+
+<!-- Instant Meeting Modal -->
+<div class="modal fade" id="instantMeetingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Start an Instant Meeting</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="instantMeetingForm">
+          <div class="mb-3">
+            <label class="form-label">Name</label>
+            <input type="text" id="instantName" class="form-control border-0 border-bottom" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Designation</label>
+            <input type="text" id="instantDesignation" class="form-control border-0 border-bottom" required>
+          </div>
+          <button type="submit" class="btn btn-outline-success w-100">Start Meeting</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Meeting Credentials Modal -->
+<div class="modal fade" id="meetingCredentialsModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-center">
+      <div class="modal-header">
+        <h5 class="modal-title">Meeting Credentials</h5>
+      </div>
+      <div class="modal-body">
+        <div id="meeting_credentials" class="border rounded p-3 position-relative">
+          <p class="mb-1">Your meeting code is: <span id="credCode"></span></p>
+          <p class="mb-1">Your meeting password is: <span id="credPassword"></span></p>
+          <button id="copyCredentials" class="btn btn-sm btn-outline-primary position-absolute bottom-0 end-0 m-2">
+            <i class="fa-solid fa-copy"></i> Copy
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="understoodBtn" class="btn btn-warning w-100">I understood</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Schedule Meeting Modal -->
+<div class="modal fade" id="scheduleMeetingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Schedule a Meeting</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="scheduleMeetingForm">
+          <div class="mb-3">
+            <label class="form-label">Name</label>
+            <input type="text" id="scheduleName" class="form-control border-0 border-bottom" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Designation</label>
+            <input type="text" id="scheduleDesignation" class="form-control border-0 border-bottom" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Time</label>
+            <input type="time" id="scheduleTime" class="form-control border-0 border-bottom">
+          </div>
+          <button type="submit" class="btn btn-outline-success w-100">Schedule</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 
 <!-- Overlay -->
 <div id="transitionOverlay" class="transition-overlay d-flex align-items-center justify-content-center">
