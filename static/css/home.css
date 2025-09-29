@@ -120,8 +120,13 @@
 
 
 
-/* @media (max-width:769px) {
+@media (max-width:769px) {
     .btn{
         margin-bottom: 1rem;
     }
-} */
+
+    #copyCredentials{
+        margin-top: 1rem !important;
+        margin-bottom: 3rem !important;
+    }
+}
