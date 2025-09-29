@@ -117,3 +117,11 @@
   opacity: 1;
   pointer-events: all;
 }
+
+
+
+/* @media (max-width:769px) {
+    .btn{
+        margin-bottom: 1rem;
+    }
+} */

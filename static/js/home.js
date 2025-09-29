@@ -33,14 +33,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Close when clicking outside
         document.addEventListener("click", function (e) {
-            const li = e.target.closest(".popover li");
-            if (li) {
-                const activePopover = document.querySelector(".popover.show");
-                if (activePopover) {
-                    bootstrap.Popover.getInstance(
-                        document.querySelector('[aria-describedby="' + activePopover.id + '"]')
-                    )?.hide();
-                }
+            const activePopover = document.querySelector(".popover.show");
+            if (!activePopover) return;
+            const triggerBtn = document.querySelector(`[aria-describedby="${activePopover.id}"]`);
+        
+            if (e.target.closest(".popover li")) {
+                bootstrap.Popover.getInstance(triggerBtn)?.hide();
+                return;
+            }
+            if (
+                !activePopover.contains(e.target) &&
+                (!triggerBtn || !triggerBtn.contains(e.target))
+            ) {
+                bootstrap.Popover.getInstance(triggerBtn)?.hide();
             }
         });
 
