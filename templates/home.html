@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Home | Connectly{% endblock %}
+{% block content %}
+
+<link rel="stylesheet" type="text/css" href="{% static 'css/home.css' %}">
+
+<div class="main">
+    <div class="heading text-center">
+        <h2>
+            Video calls and meetings for everyone
+        </h2>
+        <span id="sub_quotes">
+            Where ideas meet and minds align
+        </span>
+    </div>
+
+    <div class="meeting">
+        <button type="button" class="btn btn-outline-dark" data-bs-toggle="popover" data-bs-placement="bottom" data-for="meeting_options">
+          Start a new meeting
+        </button>
+        <ul class="popover-menu list-unstyled d-none" data-for="meeting_options">
+          <li><i class="fa-solid fa-plus"></i> Start an instant meeting</li>
+          <li><i class="fa-solid fa-clock"></i> Schedule a meeting for later</li>
+        </ul>
+
+        <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#joinMeetingModal">
+          Join a new meeting
+        </button>
+
+    </div>
+</div>
+
+
+<!-- Join Meeting Modal -->
+<div class="modal fade" id="joinMeetingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content p-4">
+      <form id="joinMeetingForm" method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label for="meetingCode" class="form-label">Meeting Code</label>
+          <input type="text" id="meetingCode" name="meeting_code" class="form-control border-0 border-bottom" required>
+        </div>
+
+        <div class="mb-3">
+          <label for="meetingPassword" class="form-label">Password</label>
+          <input type="password" id="meetingPassword" name="password" class="form-control border-0 border-bottom" required>
+        </div>
+
+        <div class="text-end">
+          <button type="submit" id="" class="btn btn-outline-success">Join</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Stage 2: Video Preview & Join -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content p-4">
+      <div class="row g-3">
+        <!-- Video Preview -->
+        <div class="col-12 col-lg-6">
+          <div id="videoContainer" class="video-wrapper">
+            <video id="videoPreview" autoplay playsinline muted></video>
+            <div id="videoOffOverlay" class="d-none">Video Off</div>
+          </div>
+          <div class="mt-2 d-flex gap-2">
+            <button id="toggleVideo" class="toggle-btn">
+                <i class="fa-solid fa-video"></i>
+            </button>
+            <button id="toggleAudio" class="toggle-btn">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Form -->
+        <div class="col-12 col-lg-6">
+          <form id="joinMeetingDetails">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label for="participantName" class="form-label">Name</label>
+              <input type="text" id="participantName" name="name" class="form-control border-0 border-bottom" required>
+            </div>
+
+            <div class="mb-3">
+              <label for="participantDesignation" class="form-label">Designation</label>
+              <input type="text" id="participantDesignation" name="designation" class="form-control border-0 border-bottom" required>
+            </div>
+
+            <div class="text-end">
+              <button type="submit" class="btn btn-outline-success">Join</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script src="{% static 'js/home.js' %}"></script>
+{% endblock %}
