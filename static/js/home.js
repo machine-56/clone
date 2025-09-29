@@ -58,7 +58,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     if (data.success) {
                         currentMeetingCode = data.meeting_code;
-                        showToast("Meeting verified, opening preview…", "success");
+                        // showToast("Meeting verified, opening preview…", "success");
                         new bootstrap.Modal(document.getElementById("previewModal")).show();
                         initPreview();
                     } else {
