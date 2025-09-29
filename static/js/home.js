@@ -386,7 +386,7 @@ if (instantForm) {
                 if (modal) modal.hide();
 
                 currentMeetingCode = data.meeting_code;
-                showToast("Instant meeting created!", "success");
+                // showToast("Instant meeting created!", "success");
 
                 // smooth transition redirect
                 showTransitionAndRedirect(`/meet_code/${currentMeetingCode}/`);
