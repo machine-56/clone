@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{meeting_data.name}} | Connectly{% endblock %}
+{% block content %}
+
+<div class="placeholder_div text-center" style="padding: 2rem; border: 1px solid #808080; border-radius: 8px;">
+    <h2>This is meeting interface</h2>
+    <span style="font-style: italic;"> this is a placeholder div</span>
+
+    <div class="mt-3" style="border: 1px dotted #101010; border-radius: 8px; padding: 1rem;">
+        <span>name: {{meeting_data.name}}</span><br>
+        <span>Host: {{meeting_data.host}}</span><br>
+        <span>Code: {{meeting_data.meeting_code}}</span>
+    </div>
+
+</div>
+
+{% endblock %}

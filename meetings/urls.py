@@ -3,6 +3,7 @@ from meetings import views
 
 urlpatterns = [
     path('', views.index, name='index'),
+    path('meet_code/<str:code>/', views.meeting, name='meeting'),
 
 
 

@@ -1,5 +1,7 @@
 let currentMeetingCode = null;
 let localStream = null;
+let selectedVideoDevice = null;
+let selectedAudioDevice = null;
 
 document.addEventListener("DOMContentLoaded", function () {
     // // ---- popover trigger ----
@@ -94,8 +96,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        showToast("Joined meeting!", "success");
-                        // localStorage.setItem("meeting_code", currentMeetingCode);
+                        const previewModal = bootstrap.Modal.getInstance(document.getElementById("previewModal"));
+                        if (previewModal) previewModal.hide();
+
+                        showTransitionAndRedirect(`/meet_code/${currentMeetingCode}/`);
                     } else {
                         showToast("Something went wrong, try again", "danger");
                     }
@@ -107,73 +111,214 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // // ---- device settings modal ----
+    const settingsBtn = document.getElementById("openSettings");
+    let videoSelect = document.getElementById("videoDeviceSelect");
+    let audioSelect = document.getElementById("audioDeviceSelect");
+
+    if (settingsBtn) {
+        settingsBtn.addEventListener("click", async () => {
+            const modal = new bootstrap.Modal(document.getElementById("deviceSettingsModal"));
+            await prepareDevices(); // permission + enumerate devices
+            modal.show();
+        });
+    }
+
+    async function prepareDevices() {
+        try {
+            // Minimal request to trigger permissions
+            const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            tempStream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+            console.warn("Permission not granted (yet):", err);
+        }
+        await populateDeviceLists();
+    }
+
+    async function populateDeviceLists() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+
+        // Clear
+        videoSelect.innerHTML = "";
+        audioSelect.innerHTML = "";
+
+        const videoDevices = devices.filter(d => d.kind === "videoinput");
+        const audioDevices = devices.filter(d => d.kind === "audioinput");
+
+        // Video
+        if (videoDevices.length === 0) {
+            const opt = document.createElement("option");
+            opt.disabled = true;
+            opt.selected = true;
+            opt.textContent = "No device found";
+            videoSelect.appendChild(opt);
+            selectedVideoDevice = null;
+        } else {
+            videoDevices.forEach((d, i) => {
+                const opt = document.createElement("option");
+                opt.value = d.deviceId;
+                opt.textContent = d.label || `Camera ${i + 1}`;
+                videoSelect.appendChild(opt);
+            });
+            selectedVideoDevice = videoDevices[0].deviceId;
+        }
+
+        // Audio
+        if (audioDevices.length === 0) {
+            const opt = document.createElement("option");
+            opt.disabled = true;
+            opt.selected = true;
+            opt.textContent = "No device found";
+            audioSelect.appendChild(opt);
+            selectedAudioDevice = null;
+        } else {
+            audioDevices.forEach((d, i) => {
+                const opt = document.createElement("option");
+                opt.value = d.deviceId;
+                opt.textContent = d.label || `Microphone ${i + 1}`;
+                audioSelect.appendChild(opt);
+            });
+            selectedAudioDevice = audioDevices[0].deviceId;
+        }
+    }
+
+    // Save settings → re-run preview
+    document.getElementById("saveDeviceSettings").addEventListener("click", () => {
+        selectedVideoDevice = videoSelect.value || null;
+        selectedAudioDevice = audioSelect.value || null;
+
+        console.log("Saved settings:", { selectedVideoDevice, selectedAudioDevice });
+
+        showToast("Device settings saved", "success");
+        const modal = bootstrap.Modal.getInstance(document.getElementById("deviceSettingsModal"));
+        modal.hide();
+
+        initPreview(); // re-run preview with new selections
+    });
+
     // // ---- video preview + toggles ----
     async function initPreview() {
         const video = document.getElementById("videoPreview");
         const overlay = document.getElementById("videoOffOverlay");
         const videoBtn = document.getElementById("toggleVideo");
         const audioBtn = document.getElementById("toggleAudio");
-    
+
         let videoStream = null;
         let audioStream = null;
-    
+        let cameraAvailable = false;
+
         // Try video
         try {
-            videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            if (selectedVideoDevice) {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: { exact: selectedVideoDevice } }
+                });
+            } else {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            }
             video.srcObject = videoStream;
             setButtonState(videoBtn, true);
+            overlay.classList.add("d-none");
+            cameraAvailable = true;
         } catch (err) {
             console.warn("Video error:", err);
             setButtonState(videoBtn, false);
+
+            overlay.textContent = "No camera found";
+            overlay.classList.remove("d-none");
+            cameraAvailable = false;
+
             showToast("No camera found", "danger");
         }
-    
+
         // Try audio
         try {
-            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (selectedAudioDevice) {
+                audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { deviceId: { exact: selectedAudioDevice } }
+                });
+            } else {
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
             setButtonState(audioBtn, true);
         } catch (err) {
             console.warn("Audio error:", err);
             setButtonState(audioBtn, false);
             showToast("No microphone found", "danger");
         }
-    
-        // Merge streams if both exist
+
+        // Merge streams
         if (videoStream || audioStream) {
             localStream = new MediaStream([
                 ...(videoStream ? videoStream.getTracks() : []),
                 ...(audioStream ? audioStream.getTracks() : [])
             ]);
         }
-    
-        // ---- toggles ----
-        videoBtn.addEventListener("click", () => {
-            if (!localStream) return;
-            console.log("Video button clicked");
-            const track = localStream.getVideoTracks()[0];
-            track.enabled = !track.enabled;
-            setButtonState(videoBtn, track.enabled);
-            overlay.classList.toggle("d-none", track.enabled);
-            console.log("Video track enabled:", track.enabled);
-        });
-    
-        audioBtn.addEventListener("click", () => {
-            if (!localStream) return;
-            console.log("Audio button clicked");
-            const track = localStream.getAudioTracks()[0];
-            track.enabled = !track.enabled;
-            setButtonState(audioBtn, track.enabled);
-            console.log("Audio track enabled:", track.enabled);
-        });
-    }
 
+        // // ---- toggles ----
+        videoBtn.onclick = () => {
+            if (!localStream || !cameraAvailable) return;
+        
+            const track = localStream.getVideoTracks()[0];
+            if (!track) return;
+            track.enabled = !track.enabled;
+        
+            setButtonState(videoBtn, track.enabled);
+        
+            // overlay
+            if (track.enabled) {
+                overlay.classList.add("d-none");
+            } else {
+                overlay.textContent = "Video Off";
+                overlay.classList.remove("d-none");
+            }
+        
+            // icon toggle
+            const icon = videoBtn.querySelector("i");
+            if (icon) {
+                icon.classList.toggle("fa-video", track.enabled);
+                icon.classList.toggle("fa-video-slash", !track.enabled);
+            }
+        };
+
+        audioBtn.onclick = () => {
+            if (!localStream) return;
+            const track = localStream.getAudioTracks()[0];
+            if (!track) return;
+            track.enabled = !track.enabled;
+        
+            setButtonState(audioBtn, track.enabled);
+        
+            // icon toggle
+            const icon = audioBtn.querySelector("i");
+            if (icon) {
+                icon.classList.toggle("fa-microphone", track.enabled);
+                icon.classList.toggle("fa-microphone-slash", !track.enabled);
+            }
+        };
+
+    }
 
 
     // // ---- utility: update button state ----
     function setButtonState(btn, enabled) {
         btn.classList.toggle("enabled", enabled);
         btn.classList.toggle("disabled", !enabled);
+
+        // update icon automatically if button has an <i>
+        const icon = btn.querySelector("i");
+        if (icon) {
+            if (icon.classList.contains("fa-video") || icon.classList.contains("fa-video-slash")) {
+                icon.classList.toggle("fa-video", enabled);
+                icon.classList.toggle("fa-video-slash", !enabled);
+            }
+            if (icon.classList.contains("fa-microphone") || icon.classList.contains("fa-microphone-slash")) {
+                icon.classList.toggle("fa-microphone", enabled);
+                icon.classList.toggle("fa-microphone-slash", !enabled);
+            }
+        }
     }
+
 
     // // ---- utility: toast ----
     function showToast(message, type) {
@@ -191,4 +336,17 @@ document.addEventListener("DOMContentLoaded", function () {
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
     }
+
+    function showTransitionAndRedirect(url) {
+        const overlay = document.getElementById("transitionOverlay");
+        if (!overlay) return;
+    
+        overlay.classList.add("active");
+        setTimeout(() => {
+            window.location.href = url;
+        }, 1600);
+    }
+
+
+
 });
