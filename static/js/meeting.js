@@ -1,7 +1,7 @@
 // meeting.js
 // UI + layout + minimal plumbing. No networking here.
 // RTC code plugs in via window.RTC_BRIDGE and window.ChatSendAdapter.
-console.log('------------------------  meeting.js loaded ---------------------------')
+console.log('------------------------ meeting.js (fixed version) ---------------------------');
 
 // ---------- Config / State ----------
 const State = {
@@ -14,7 +14,7 @@ const State = {
   currentLayout: Number(localStorage.getItem("meeting.layout") || 1),
 };
 
-// Expose a simple bridge the RTC layer can use to interact with UI.
+// ---------- RTC Bridge ----------
 window.RTC_BRIDGE = {
   upsertParticipant(p) {
     const i = State.participants.findIndex((x) => x.id === p.id);
@@ -29,43 +29,74 @@ window.RTC_BRIDGE = {
     refreshParticipantsOffcanvas();
   },
   attachStreamTo(id, stream) {
-    let video = document.querySelector(`video[data-peer="${id}"]`);
+    const tile = document.querySelector(`.tile[data-pid="${id}"]`);
+    const mount = tile && tile.querySelector(".media-slot");
+    if (!mount) return;
+
+    let video = mount.querySelector("video");
     if (!video) {
-      const label = [...document.querySelectorAll(".tile .name-tag")].find((el) =>
-        el.textContent.trim().toLowerCase().includes(id.toLowerCase())
-      );
-      let mount = null;
-      if (label) mount = label.closest(".tile")?.querySelector(".ratio .w-100");
-      else {
-        const spots = document.querySelectorAll(".tile .ratio .w-100");
-        mount = spots[spots.length - 1] || null;
-      }
-      if (!mount) return;
       video = document.createElement("video");
       video.setAttribute("playsinline", "true");
       video.setAttribute("autoplay", "true");
-      video.dataset.peer = id;
+      video.style.width = "100%";
+      video.style.height = "100%";
+      video.style.objectFit = "contain";
+      video.style.background = "transparent";
+
+      const isSelf = !!State.participants.find(p => p.id === id && p.self);
+      if (isSelf) video.muted = true;
+
       mount.appendChild(video);
     }
     video.srcObject = stream;
-  },
-  setSelfDeviceFlags({ camOn, micOn }) {
-    const self = State.participants.find((p) => p.id === "self");
-    if (self) {
-      if (typeof camOn === "boolean") self.cam = camOn ? "on" : "off";
-      if (typeof micOn === "boolean") self.mic = micOn ? "on" : "off";
-      renderAll();
+
+    const ensurePlay = () => { try { video.play(); } catch (_) {} };
+    (video.readyState >= 2) ? ensurePlay() : video.onloadedmetadata = ensurePlay;
+
+    const isSelf = !!State.participants.find(p => p.id === id && p.self);
+    if (!isSelf) {
+      let audio = mount.querySelector("audio");
+      if (!audio) {
+        audio = document.createElement("audio");
+        audio.autoplay = true;
+        mount.appendChild(audio);
+      }
+      audio.srcObject = stream;
+    }
+
+    const vtrack = stream.getVideoTracks()[0];
+    const updateCamClass = () => {
+      if (!tile) return;
+      const on = vtrack && vtrack.enabled && stream.getVideoTracks().length > 0;
+      tile.classList.toggle("cam-on", !!on);
+    };
+    updateCamClass();
+    if (vtrack) {
+      vtrack.onmute = updateCamClass;
+      vtrack.onunmute = updateCamClass;
+      vtrack.onended = updateCamClass;
+      vtrack.addEventListener("ended", updateCamClass);
     }
   },
-  toast(msg) {
-    toast(msg);
+
+  // simplified: do NOT re-render on toggles
+  setSelfDeviceFlags({ camOn, micOn }) {
+    const self = State.participants.find((p) => p.self);
+    if (self) {
+      if (typeof camOn === "boolean") {
+        self.cam = camOn ? "on" : "off";
+        const tile = document.querySelector(`.tile[data-pid="${self.id || 'self'}"]`);
+        if (tile) tile.classList.toggle("cam-on", camOn);
+      }
+      if (typeof micOn === "boolean") {
+        self.mic = micOn ? "on" : "off";
+      }
+    }
   },
-  systemChat(text) {
-    pushChat({ system: true, text });
-  },
-  addChat(from, text) {
-    pushChat({ from, text });
-  }
+
+  toast(msg) { toast(msg); },
+  systemChat(text) { pushChat({ system: true, text }); },
+  addChat(from, text) { pushChat({ from, text }); }
 };
 
 window.ChatSendAdapter = window.ChatSendAdapter || null;
@@ -86,9 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // ---------- About modal ----------
 function initAbout() {
   const hostEl = document.getElementById("about-host");
-
   if (hostEl) hostEl.textContent = State.HostName;
-
 }
 
 // ---------- Grid render ----------
@@ -98,6 +127,7 @@ function renderAll(layout = State.currentLayout || 1) {
   const inner = document.getElementById("carousel-inner");
   if (!inner) return;
   inner.innerHTML = "";
+
   chunks.forEach((group, idx) => {
     const item = document.createElement("div");
     item.className = "carousel-item h-100" + (idx === 0 ? " active" : "");
@@ -107,22 +137,36 @@ function renderAll(layout = State.currentLayout || 1) {
     item.appendChild(grid);
     inner.appendChild(item);
   });
+
   renderIndicators(chunks.length);
+
+  // reattach self stream if layout rebuilt
+  if (window.RTC_BRIDGE && typeof window.RTC_BRIDGE.attachStreamTo === "function") {
+    const self = State.participants.find(p => p.self);
+    if (self && window.localStream) {
+      setTimeout(() => window.RTC_BRIDGE.attachStreamTo(self.id, window.localStream), 200);
+    }
+  }
 }
+
 
 function renderTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile" + (p.cam === "on" ? " cam-on" : "");
+  tile.dataset.pid = p.id;
+
   const ratio = document.createElement("div");
   ratio.className = "ratio";
   ratio.style.setProperty("--bs-aspect-ratio", getAspectRatio());
-  const content = document.createElement("div");
-  content.className = "w-100 h-100 d-flex align-items-center justify-content-center";
+
+  const slot = document.createElement("div");
+  slot.className = "w-100 h-100 d-flex align-items-center justify-content-center media-slot";
+  ratio.appendChild(slot);
+
   const label = document.createElement("div");
   label.className = "name-tag d-inline-block text-truncate";
   label.textContent = p.name;
-  content.appendChild(document.createTextNode(""));
-  ratio.appendChild(content);
+
   tile.appendChild(ratio);
   tile.appendChild(label);
   return tile;
@@ -148,9 +192,7 @@ function renderIndicators(n) {
     carouselEl.dataset._wired = "1";
     carouselEl.addEventListener("slid.bs.carousel", (ev) => {
       const idx = ev.to;
-      [...wrap.children].forEach((el, j) => {
-        el.classList.toggle("active", j === idx);
-      });
+      [...wrap.children].forEach((el, j) => el.classList.toggle("active", j === idx));
     });
   }
 }
@@ -177,9 +219,7 @@ function initMorePopover() {
         const clone = menu.cloneNode(true);
         clone.classList.remove("d-none");
         clone.querySelectorAll("li").forEach((li) => {
-          li.addEventListener("click", () => {
-            bootstrap.Popover.getInstance(btn)?.hide();
-          });
+          li.addEventListener("click", () => bootstrap.Popover.getInstance(btn)?.hide());
         });
         return clone;
       }
@@ -199,9 +239,7 @@ function initControls() {
   if (leaveBtn && !leaveBtn.dataset._wired) {
     leaveBtn.dataset._wired = "1";
     leaveBtn.addEventListener("click", () => {
-      try {
-        history.replaceState(null, "", "/");
-      } catch (e) {}
+      try { history.replaceState(null, "", "/"); } catch (e) {}
       location.href = "/";
     });
   }
@@ -212,6 +250,8 @@ function bindToggle(id, key) {
   if (!el || el.dataset._wired) return;
   el.dataset._wired = "1";
   el.addEventListener("click", () => {
+    if (el.classList.contains("disabled")) return;
+
     const on = !el.classList.contains("is-on");
     el.classList.toggle("is-on", on);
     el.classList.toggle("is-off", !on);
@@ -226,19 +266,14 @@ function bindToggle(id, key) {
       el.innerHTML = on
         ? `<i class="fa-solid fa-video"></i>`
         : `<i class="fa-solid fa-video-slash"></i>`;
-      const self = State.participants.find((p) => p.id === "self");
+      const self = State.participants.find((p) => p.self);
       if (self) {
         self.cam = on ? "on" : "off";
-        renderAll();
+        const tile = document.querySelector(`.tile[data-pid="${self.id || 'self'}"]`);
+        if (tile) tile.classList.toggle("cam-on", on);
       }
     }
-    if (key === "share") {
-      // handled in RTC layer
-    }
-
-    // 🔧 removed local toast for self-handraise
     if (key === "hand" && on) {
-      // only notify RTC, no local toast
       window.RTC_BRIDGE && window.RTC_BRIDGE.systemChat("You raised hand");
     }
   });
@@ -260,30 +295,24 @@ function initLayoutModal() {
   let tempLayout = State.currentLayout || 1;
 
   modalEl.addEventListener("show.bs.modal", () => {
-    // 🔧 load current stored layout before showing
     tempLayout = Number(localStorage.getItem("meeting.layout") || State.currentLayout || 1);
     modalEl.querySelectorAll(".layout-opt").forEach((b, i) => {
       b.classList.toggle("active", i + 1 === tempLayout);
     });
   });
 
-  // when clicking outside or cancel, restore old layout
   modalEl.querySelector(".btn-cancel")?.addEventListener("click", () => {
-      // get last saved layout from localStorage and revert
-      const savedLayout = Number(localStorage.getItem("meeting.layout") || 2);
-      applyLayout(savedLayout);
-      State.currentLayout = savedLayout;
-      modal.hide();
+    const savedLayout = Number(localStorage.getItem("meeting.layout") || 2);
+    applyLayout(savedLayout);
+    State.currentLayout = savedLayout;
+    modal.hide();
   });
-
 
   modalEl.querySelectorAll(".layout-opt").forEach((btn, idx) => {
     btn.addEventListener("click", () => {
       tempLayout = idx + 1;
       applyLayout(tempLayout);
-      modalEl
-        .querySelectorAll(".layout-opt")
-        .forEach((b) => b.classList.remove("active"));
+      modalEl.querySelectorAll(".layout-opt").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
     });
   });
@@ -292,7 +321,6 @@ function initLayoutModal() {
   if (saveBtn && !saveBtn.dataset._wired) {
     saveBtn.dataset._wired = "1";
     saveBtn.addEventListener("click", () => {
-      // 🔧 Save new layout persistently
       State.currentLayout = tempLayout;
       localStorage.setItem("meeting.layout", State.currentLayout);
       modal.hide();
@@ -301,9 +329,7 @@ function initLayoutModal() {
 }
 
 // ---------- Participants offcanvas ----------
-function initParticipantsOffcanvas() {
-  refreshParticipantsOffcanvas();
-}
+function initParticipantsOffcanvas() { refreshParticipantsOffcanvas(); }
 function refreshParticipantsOffcanvas() {
   const ul = document.getElementById("participants-list");
   if (!ul) return;
@@ -357,28 +383,20 @@ function pushChat(msg) {
   if (msg.system) {
     div.innerHTML = `<div class="text-secondary small">${escapeHtml(msg.text)}</div>`;
   } else {
-    div.innerHTML = `<div><strong>${escapeHtml(
-      msg.from || "Anon"
-    )}</strong></div><div>${escapeHtml(msg.text)}</div>`;
+    div.innerHTML = `<div><strong>${escapeHtml(msg.from || "Anon")}</strong></div><div>${escapeHtml(msg.text)}</div>`;
   }
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 }
 
 // ---------- Idle controls fade ----------
-function initIdleFade() {
-  resetIdleTimer();
-}
+function initIdleFade() { resetIdleTimer(); }
 function wireGlobalActivity() {
   ["mousemove", "mousedown", "keydown", "touchstart", "wheel"].forEach((evt) => {
-    document.addEventListener(
-      evt,
-      () => {
-        showControls();
-        resetIdleTimer();
-      },
-      { passive: true }
-    );
+    document.addEventListener(evt, () => {
+      showControls();
+      resetIdleTimer();
+    }, { passive: true });
   });
 }
 function resetIdleTimer() {
@@ -426,7 +444,5 @@ function toast(msg) {
   setTimeout(() => t.remove(), 2200);
 }
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (m) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m])
-  );
+  return s.replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
 }

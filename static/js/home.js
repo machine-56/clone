@@ -123,6 +123,9 @@ document.addEventListener("DOMContentLoaded", function () {
                         //  Save to localStorage so meeting_rtc.js can reuse it
                         localStorage.setItem("connectly.name", document.getElementById("participantName").value);
                         localStorage.setItem("connectly.designation", document.getElementById("participantDesignation").value);
+                        localStorage.setItem("connectly.pref_cam", "off");
+                        localStorage.setItem("connectly.pref_mic", "off");
+                        localStorage.setItem("meeting.layout", "2");
                     
                         showTransitionAndRedirect(`/meet_code/${currentMeetingCode}/`);
                     } else {
@@ -393,6 +396,9 @@ if (instantForm) {
 
                 // write *before* redirect; tiny delay avoids Brave race
                 localStorage.setItem("connectly.name", hostName || "Host");
+                localStorage.setItem("connectly.pref_cam", "off");
+                localStorage.setItem("connectly.pref_mic", "off");
+                localStorage.setItem("meeting.layout", "2");
                 // localStorage.setItem("connectly.is_host", "1");
 
                 currentMeetingCode = data.meeting_code;
