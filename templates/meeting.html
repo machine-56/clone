@@ -1,18 +1,156 @@
-{% extends 'base.html' %}
-{% load static %}
-{% block title %}{{meeting_data.name}} | Connectly{% endblock %}
-{% block content %}
+<!doctype html>
+<html lang="en">
+    {% load static %}
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Connectly{% endblock %}</title>
+    <link rel="shortcut icon" href="{% static 'images/icon-bookmark.png' %}" type="image/x-icon">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 
-<div class="placeholder_div text-center" style="padding: 2rem; border: 1px solid #808080; border-radius: 8px;">
-    <h2>This is meeting interface</h2>
-    <span style="font-style: italic;"> this is a placeholder div</span>
+    <!-- Google fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
 
-    <div class="mt-3" style="border: 1px dotted #101010; border-radius: 8px; padding: 1rem;">
-        <span>name: {{meeting_data.name}}</span><br>
-        <span>Host: {{meeting_data.host}}</span><br>
-        <span>Code: {{meeting_data.meeting_code}}</span>
-    </div>
+    <link rel="stylesheet" href="{% static 'css/meeting.css' %}">
 
+  </head>
+  <body class="bg-dark text-light">
+
+      <div id="meeting-root" class="d-flex flex-column position-relative" style="height: 99vh;">
+        <!-- indicators (dots/dashes) -->
+        <div id="page-indicators" class="position-absolute start-0 end-0" style="z-index: 1049;"></div>
+      
+        <!-- carousel stage -->
+        <div id="stage-wrap" class="flex-grow-1 overflow-hidden position-relative">
+          <div id="meeting-carousel" class="carousel slide h-100" data-bs-touch="true" data-bs-ride="false">
+            <div class="carousel-inner h-100" id="carousel-inner">
+              <!-- slides injected by JS -->
+            </div>
+            <!-- hide default controls fully, we’re using indicators -->
+            <button class="carousel-control-prev d-none" type="button" data-bs-target="#meeting-carousel" data-bs-slide="prev"></button>
+            <button class="carousel-control-next d-none" type="button" data-bs-target="#meeting-carousel" data-bs-slide="next"></button>
+          </div>
+        </div>
+      
+        <!-- controls bar -->
+        <div id="ctrl-bar" class="position-fixed bottom-0 start-0 end-0 py-2 px-3">
+          <div class="d-flex justify-content-center align-items-center gap-3">
+            <button class="btn btn-icon ctrl is-off" id="btn-mic" aria-pressed="false" title="Toggle mic">
+              <i class="fa-solid fa-microphone-slash"></i>
+            </button>
+            <button class="btn btn-icon ctrl is-off" id="btn-cam" aria-pressed="false" title="Toggle camera">
+              <i class="fa-solid fa-video-slash"></i>
+            </button>
+            <button class="btn btn-icon ctrl is-off" id="btn-share" aria-pressed="false" title="Share screen">
+              <i class="fa-solid fa-display"></i>
+            </button>
+            <button class="btn btn-icon ctrl is-off" id="btn-hand" aria-pressed="false" title="Raise hand">
+              <i class="fa-solid fa-hand"></i>
+            </button>
+      
+<div class="dropstart">
+  <button id="btn-more" type="button" class="btn btn-icon"
+          data-bs-toggle="popover" data-for="more_options"
+          data-bs-placement="top">
+    <i class="fa-solid fa-ellipsis-vertical"></i>
+  </button>
+
+  <!-- hidden menu -->
+  <ul class="popover-menu list-unstyled d-none" data-for="more_options">
+    <li data-bs-toggle="offcanvas" data-bs-target="#offcanvas-chat">
+      <i class="fa-solid fa-comment"></i> Open chat
+    </li>
+    <li data-bs-toggle="modal" data-bs-target="#layout-modal">
+      <i class="fa-solid fa-table-cells"></i> Layout
+    </li>
+    <li data-bs-toggle="offcanvas" data-bs-target="#offcanvas-participants">
+      <i class="fa-solid fa-users"></i> Participants
+    </li>
+    <li data-bs-toggle="modal" data-bs-target="#about-modal">
+      <i class="fa-solid fa-circle-info"></i> About
+    </li>
+  </ul>
 </div>
 
-{% endblock %}
+      
+            <button class="btn btn-danger" id="btn-leave" title="Leave">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Participants offcanvas -->
+      <div class="offcanvas offcanvas-end text-bg-dark" tabindex="-1" id="offcanvas-participants" aria-labelledby="offcanvas-participants-label">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title" id="offcanvas-participants-label">Participants</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+          <ul id="participants-list" class="list-group small ul_main"></ul>
+        </div>
+      </div>
+      
+      <!-- Chat offcanvas -->
+      <div class="offcanvas offcanvas-end text-bg-dark" tabindex="-1" id="offcanvas-chat" aria-labelledby="offcanvas-chat-label" style="width: 360px;">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title" id="offcanvas-chat-label">Chat</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column">
+          <div id="chat-log" class="flex-grow-1 overflow-auto pe-1"></div>
+          <div class="mt-2">
+            <div class="input-group">
+              <input id="chat-input" type="text" class="form-control form-control-sm" placeholder="Message">
+              <button id="chat-send" class="btn btn-sm btn-outline-light" type="button" title="Send">
+                <i class="fa-solid fa-paper-plane"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- About modal -->
+      <div class="modal fade" id="about-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content bg-dark text-light p-3">
+            <div class="d-flex flex-column gap-2">
+              <div><span class="text-secondary">Host:</span> <span id="about-host" class="user-select-all"></span></div>
+              <div class="user-select-all">
+                  <div><span class="text-secondary">meeting code:</span> <span id="about--code">{{meeting_data.meeting_code}}</span></div>
+                  <div><span class="text-secondary">password:</span><span id="about--pass">{{ meeting_data.meeting_pwd }}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Layout modal -->
+      <div class="modal fade" id="layout-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content bg-dark text-light">
+            <div class="modal-body">
+              <div class="mb-2 small text-secondary">Tile size (live preview, saves on OK)</div>
+              <div class="d-grid gap-2">
+                <button class="btn btn-outline-light layout-opt">Highlight</button>
+                <button class="btn btn-outline-light layout-opt">Comfort</button>
+                <button class="btn btn-outline-light layout-opt"3%">Balanced</button>
+                <button class="btn btn-outline-light layout-opt">Normal</button>
+                <button class="btn btn-outline-light layout-opt">Compact</button>
+              </div>
+            </div>
+            <div class="modal-footer border-0">
+              <button type="button" class="btn btn-outline-secondary btn-cancel">Cancel</button>
+              <button type="button" id="layout-save" class="btn btn-light" data-bs-dismiss="modal">OK</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="https://kit.fontawesome.com/0368c72d3f.js" crossorigin="anonymous"></script>
+    <script src="{% static 'js/meeting.js' %}"></script>
+  <script src="{% static 'js/meeting_rtc.js' %}"></script>
+</html>

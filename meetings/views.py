@@ -2,7 +2,10 @@ import random
 import string
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
+from .models import *
+
 import json
+from django.utils import timezone
 
 # Create your views here.
 def index(request):
@@ -11,7 +14,8 @@ def index(request):
 
 def meeting(request, code):
     meeting_id = code
-    print(f'[meeting] === meeting id : {meeting_id}')
+    print(f'[meeting]? === meeting id : {meeting_id}')
+    print(f'[meeting] === meeting pwd : {Meeting.objects.get(meeting_code = meeting_id).meeting_pwd}')
 
     #? user_allowed = MeetingParticipant.objects.filter(
     #?     user=request.user,
@@ -23,13 +27,10 @@ def meeting(request, code):
     if not user_allowed:
         return redirect("index")
 
-    meeting_data = {
-        'name': 'demo name',
-        'host': 'demo host',
-        'meeting_code': meeting_id
-    }
-    return render(request, 'meeting.html', {'meeting_data': meeting_data})
+    meeting_data = Meeting.objects.get(meeting_code = meeting_id)
 
+    print(f'[meeting] === meeting data : {meeting_data}')
+    return render(request, 'meeting.html', {'meeting_data': meeting_data})
 
 
 
@@ -38,76 +39,99 @@ def meeting(request, code):
 
 def verify_meeting(request):
     if request.method == "POST":
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except Exception:
-            return JsonResponse({"success": False, "error": "invalid_json"}, status=400)
-
-        meeting_code = payload.get("meeting_code")
+        payload = json.loads(request.body.decode("utf-8"))
+        code = payload.get("meeting_code")
         password = payload.get("password")
-        print(f'[verify_meeting] === meeting_code : {meeting_code}\npassword : {password}')
 
-        #TODO: Dummy check
-        if meeting_code == "meeting" and password == "1234":
-            return JsonResponse({"success": True, "meeting_code": meeting_code})
-        return JsonResponse({"success": False, "error": "invalid_credentials"})
-    
+        try:
+            meeting = Meeting.objects.get(meeting_code=code, meeting_pwd=password)
+            return JsonResponse({"success": True, "meeting_code": meeting.meeting_code})
+        except Meeting.DoesNotExist:
+            return JsonResponse({"success": False, "error": "invalid_credentials"})
     return JsonResponse({"success": False, "error": "invalid_method"}, status=405)
 
 
 def join_meeting(request):
     if request.method == "POST":
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except Exception:
-            return JsonResponse({"success": False, "error": "invalid_json"}, status=400)
-
-        meeting_code = payload.get("meeting_code")
+        payload = json.loads(request.body.decode("utf-8"))
+        code = payload.get("meeting_code")
         name = payload.get("name")
         designation = payload.get("designation")
 
-        print("[JOIN MEETING PAYLOAD]", payload)
+        if not (code and name and designation):
+            return JsonResponse({"success": False, "error": "missing_fields"})
 
-        if meeting_code == "meeting" and name and designation: #TODO: change to check and save later
-            # obj = MeetingParticipant(
-            #   meet_id = Meetings..objects.filter(code = meeting_code).first()
-            #   name = name
-            #   designation = designation
-            # )
-            # obj.save()
+        try:
+            meeting = Meeting.objects.get(meeting_code=code)
+            Participant.objects.create(
+                meeting=meeting,
+                name=name,
+                designation=designation
+            )
             return JsonResponse({"success": True})
-        return JsonResponse({"success": False, "error": "invalid_data"})
-    
+        except Meeting.DoesNotExist:
+            return JsonResponse({"success": False, "error": "meeting_not_found"})
     return JsonResponse({"success": False, "error": "invalid_method"}, status=405)
 
 
 def start_instant_meeting(request):
     if request.method == "POST":
-        # TODO: later save to DB
-        meeting_code = generate_code()
-        password = generate_password()
+        payload = json.loads(request.body.decode("utf-8"))
+        name = payload.get("name")
+        designation = payload.get("designation")
 
-        return JsonResponse({
-            "success": True,
-            "meeting_code": meeting_code,
-            "password": password
-        })
+        code = generate_code()
+        pwd = generate_password()
+
+        meeting = Meeting.objects.create(
+            host_name=name,
+            host_designation=designation,
+            meeting_code=code,
+            meeting_pwd=pwd,
+            started_on=timezone.now()
+        )
+
+        return JsonResponse({"success": True, "meeting_code": meeting.meeting_code, "password": meeting.meeting_pwd})
     return JsonResponse({"success": False, "error": "invalid_request"}, status=400)
 
 
 def schedule_meeting(request):
     if request.method == "POST":
-        # TODO: later save to DB
-        meeting_code = generate_code()
-        password = generate_password()
+        payload = json.loads(request.body.decode("utf-8"))
+        name = payload.get("name")
+        designation = payload.get("designation")
+        time_str = payload.get("time")
 
-        return JsonResponse({
-            "success": True,
-            "meeting_code": meeting_code,
-            "password": password
-        })
+        code = generate_code()
+        pwd = generate_password()
+
+        if time_str:
+            # store with given scheduled time
+            scheduled_time = timezone.make_aware(
+                timezone.datetime.combine(timezone.now().date(), timezone.datetime.strptime(time_str, "%H:%M").time())
+            )
+        else:
+            scheduled_time = timezone.now()
+
+        meeting = Meeting.objects.create(
+            host_name=name,
+            host_designation=designation,
+            meeting_code=code,
+            meeting_pwd=pwd,
+            started_on=scheduled_time
+        )
+
+        return JsonResponse({"success": True, "meeting_code": meeting.meeting_code, "password": meeting.meeting_pwd})
     return JsonResponse({"success": False, "error": "invalid_request"}, status=400)
 
+
+def end_meeting(request, code):
+    mt = Meeting.objects.filter(meeting_code=code).first()
+    if not mt:
+        return JsonResponse({"success": False})
+    mt.host_status = 2
+    mt.save(update_fields=["host_status"])
+    return JsonResponse({"success": True})
 
 
 

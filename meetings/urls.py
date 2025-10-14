@@ -12,5 +12,6 @@ urlpatterns = [
     path("join_meeting/", views.join_meeting, name="join_meeting"),
     path("start_instant_meeting/", views.start_instant_meeting, name="start_instant_meeting"),
     path("schedule_meeting/", views.schedule_meeting, name="schedule_meeting"),
+    path('end/<str:code>/', views.end_meeting, name='end_meeting'),
 
 ]

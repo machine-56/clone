@@ -1,0 +1,66 @@
+/* @import url(/static/css/colour.css); */
+
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body{
+    font-family: Poppins, Quicksand;
+    min-height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+}
+.main{
+    height: 100%;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.logo{
+    width: 180px;
+}
+
+
+.btn-cstm {
+    background-color: var(--primary-red);
+    border: none;
+    color: white;
+    padding: 0.6rem 2rem;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    box-shadow: var(--shadow-medium);
+}
+
+.btn-cstm:hover {
+    background-color: var(--accent-red);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-dark);
+}
+
+.btn-cstm:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-light);
+}
+
+.btn_w{
+    padding: 0.6rem 2rem;
+}
+
+
+
+.footer_main{
+    background-color: #000000e5;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 1rem 2rem;
+}

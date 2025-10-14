@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'meetings',
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -56,7 +57,20 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'connectly.wsgi.application'
+# WSGI_APPLICATION = 'connectly.wsgi.application'
+
+ASGI_APPLICATION = 'connectly.asgi.application'
+
+# channel
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)]
+        },
+    },
+}
+
 
 
 # Database
@@ -112,7 +126,8 @@ USE_TZ = True
 STATIC_URL = '/static/'
 MEDIA_URL= '/media/'
 
-STATICFILES_DIRS = [os.path.join(BASE_DIR,'static')]
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_ROOT=os.path.join(BASE_DIR,'media')
 
 
