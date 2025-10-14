@@ -6,6 +6,9 @@ from .models import *
 
 import json
 from django.utils import timezone
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 
 # Create your views here.
 def index(request):
@@ -31,6 +34,47 @@ def meeting(request, code):
 
     print(f'[meeting] === meeting data : {meeting_data}')
     return render(request, 'meeting.html', {'meeting_data': meeting_data})
+
+
+
+#? --- admin routes ---
+
+def admin_login(request):
+    if request.method == "POST":
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect("admin_dashboard")
+        else:
+            return render(request, "admin_login.html", {"error": "Invalid credentials"})
+    return render(request, "admin_login.html")
+
+
+
+@login_required(login_url="/ad/login/")
+def admin_logout(request):
+    logout(request)
+    return redirect("admin_login")
+
+
+
+@login_required(login_url="/ad/login/")
+def admin_dashboard(request):
+    meetings = Meeting.objects.all().order_by("-started_on")
+    paginator = Paginator(meetings, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    return render(request, "admin_dashboard.html", {"page_obj": page_obj})
+
+
+@login_required(login_url="/ad/login/")
+def admin_meeting_detail(request, mid):
+    meeting = Meeting.objects.get(id=mid)
+    participants = Participant.objects.filter(meeting=meeting).order_by("joined_at")
+    return render(request, "admin_meeting_detail.html", {"meeting": meeting, "participants": participants})
+
 
 
 

@@ -5,6 +5,12 @@ urlpatterns = [
     path('', views.index, name='index'),
     path('meet_code/<str:code>/', views.meeting, name='meeting'),
 
+    #? admin routes
+    path('ad/login/', views.admin_login, name='admin_login'),
+    path('ad/logout/', views.admin_logout, name='admin_logout'),
+    path('ad/dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('ad/meeting/<int:mid>/', views.admin_meeting_detail, name='admin_meeting_detail'),
+
 
 
 #! --- stand alones ---

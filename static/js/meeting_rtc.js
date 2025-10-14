@@ -1,6 +1,8 @@
 // meeting_rtc.js
 // Full-mesh WebRTC signaling over Django Channels.
 
+console.log('------------------------ meeting-rtc.js (new testing 6) ---------------------------');
+
 (function(){
   const meetingCode = window.location.pathname.split("/")[2];
   const BR = window.RTC_BRIDGE;
@@ -15,6 +17,7 @@
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
   let WS = null;
 
+  // peers map stores: { pc, vTransceiver }
   const peers = new Map();
   let localStream = null;
   let currentVideoTrack = null;
@@ -41,61 +44,50 @@
     WS?.close();
   });
 
-async function initLocalMedia() {
-  // --- Step 1: try to get camera+mic ---
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  } catch (e1) {
-    try { localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
-    catch (e2) {
-      try { localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true }); }
-      catch (e3) { localStream = new MediaStream(); }
+  async function initLocalMedia() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (e1) {
+      try { localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
+      catch (e2) {
+        try { localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true }); }
+        catch (e3) { localStream = new MediaStream(); }
+      }
+    }
+
+    currentVideoTrack = localStream.getVideoTracks()[0] || null;
+    currentAudioTrack = localStream.getAudioTracks()[0] || null;
+    window.localStream = localStream;
+
+    const prefCam = localStorage.getItem("connectly.pref_cam") || "on";
+    const prefMic = localStorage.getItem("connectly.pref_mic") || "on";
+    if (currentVideoTrack) currentVideoTrack.enabled = (prefCam === "on");
+    if (currentAudioTrack) currentAudioTrack.enabled = (prefMic === "on");
+
+    if (!currentVideoTrack) document.getElementById("btn-cam")?.classList.add("disabled");
+    if (!currentAudioTrack) document.getElementById("btn-mic")?.classList.add("disabled");
+
+    BR.upsertParticipant({
+      id: selfId,
+      name: `${getName()} (you)`,
+      cam: currentVideoTrack && currentVideoTrack.enabled ? "on" : "off",
+      mic: currentAudioTrack && currentAudioTrack.enabled ? "on" : "off",
+      self: true
+    });
+    setTimeout(() => BR.attachStreamTo(selfId, localStream), 300);
+    BR.attachStreamTo(selfId, localStream);
+
+    peers.forEach(({ pc }) => {
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    });
+
+    if (currentVideoTrack) {
+      currentVideoTrack.onended = () => {
+        BR.setSelfDeviceFlags({ camOn: false });
+        localStorage.setItem("connectly.pref_cam", "off");
+      };
     }
   }
-
-  // --- Step 2: extract tracks ---
-  currentVideoTrack = localStream.getVideoTracks()[0] || null;
-  currentAudioTrack = localStream.getAudioTracks()[0] || null;
-  window.localStream = localStream;
-
-
-  // --- Step 3: apply user preferences ---
-  const prefCam = localStorage.getItem("connectly.pref_cam") || "on";
-  const prefMic = localStorage.getItem("connectly.pref_mic") || "on";
-
-  if (currentVideoTrack) currentVideoTrack.enabled = (prefCam === "on");
-  if (currentAudioTrack) currentAudioTrack.enabled = (prefMic === "on");
-
-  // disable UI buttons if no device found
-  if (!currentVideoTrack) document.getElementById("btn-cam")?.classList.add("disabled");
-  if (!currentAudioTrack) document.getElementById("btn-mic")?.classList.add("disabled");
-
-  // --- Step 4: show your own preview tile immediately ---
-  BR.upsertParticipant({
-    id: selfId,
-    name: `${getName()} (you)`,
-    cam: currentVideoTrack && currentVideoTrack.enabled ? "on" : "off",
-    mic: currentAudioTrack && currentAudioTrack.enabled ? "on" : "off",
-    self: true
-  });
-  setTimeout(() => BR.attachStreamTo(selfId, localStream), 300);
-  BR.attachStreamTo(selfId, localStream);
-
-  // --- Step 5: ensure all future peers get this stream ---
-  // This lets other participants see you as soon as they connect.
-  peers.forEach(({ pc }) => {
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-  });
-
-  // --- Step 6: listen for track enable/disable changes (camera toggles) ---
-  if (currentVideoTrack) {
-    currentVideoTrack.onended = () => {
-      BR.setSelfDeviceFlags({ camOn: false });
-      localStorage.setItem("connectly.pref_cam", "off");
-    };
-  }
-}
-
 
   function connectWS(){
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -105,7 +97,6 @@ async function initLocalMedia() {
       if (prevClientId && prevClientId !== selfId) {
         try { WS.send(JSON.stringify({ type: "leave" })); } catch(e){}
       }
-
       WS.send(JSON.stringify({
         type: "presence",
         clientId: selfId,
@@ -192,7 +183,17 @@ async function initLocalMedia() {
       if (t === "offer") {
         if (msg.to !== selfId) return;
         const from = msg.from;
-        const pc = ensurePeer(from);
+        const peerObj = ensurePeer(from);
+        const pc = peerObj.pc;
+
+        // make sure we advertise what we might send back
+        if (localStream && pc.getSenders().length === 0) {
+          localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+            console.log(`[RTC ${from}] ensured track before answer`, track.kind);
+          });
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -203,8 +204,10 @@ async function initLocalMedia() {
       if (t === "answer") {
         if (msg.to !== selfId) return;
         const from = msg.from;
-        const peer = peers.get(from);
-        if (peer) await peer.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        const peerObj = peers.get(from);
+        if (peerObj && peerObj.pc) {
+          await peerObj.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        }
         return;
       }
 
@@ -218,88 +221,135 @@ async function initLocalMedia() {
     };
   }
 
-  function ensurePeer(peerId){
+  function ensurePeer(peerId) {
     if (peers.has(peerId)) return peers.get(peerId);
+
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    if (localStream) localStream.getTracks().forEach(tr => pc.addTrack(tr, localStream));
+    // add whatever local tracks exist (audio/cam)
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
+        console.log(`[RTC ${peerId}] added track`, track.kind);
+      });
+    }
+
+    // ensure a dedicated VIDEO TRANSCIEVER always exists for replaceTrack later
+    // this avoids renegotiation when camera is off at share time
+    let vTransceiver = pc.getTransceivers().find(t => t.receiver && t.receiver.track && t.receiver.track.kind === "video");
+    if (!vTransceiver) {
+      vTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
+      // if we already have a camera track, attach it; otherwise keep slot empty
+      const cam = localStream && localStream.getVideoTracks()[0];
+      vTransceiver.sender.replaceTrack(cam || null);
+    }
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
-        WS?.send(JSON.stringify({ type:"candidate", from:selfId, to:peerId, candidate:e.candidate }));
+        WS?.send(JSON.stringify({ type: "candidate", from: selfId, to: peerId, candidate: e.candidate }));
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[RTC ${peerId}] state:`, pc.iceConnectionState);
+    };
+
     pc.ontrack = (e) => {
+      console.log(`[RTC ${peerId}] ontrack fired`, e.streams);
       const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
       BR.upsertParticipant({ id: peerId });
       BR.attachStreamTo(peerId, stream);
     };
 
-    peers.set(peerId, { pc });
-    return peers.get(peerId);
+    const info = { pc, vTransceiver };
+    peers.set(peerId, info);
+    return info;
   }
 
-  async function startCall(peerId){
-    const peer = ensurePeer(peerId);
-    const offer = await peer.pc.createOffer();
-    await peer.pc.setLocalDescription(offer);
-    WS?.send(JSON.stringify({ type:"offer", from:selfId, to:peerId, sdp:offer }));
+  async function startCall(peerId) {
+    const peerObj = ensurePeer(peerId);
+    const pc = peerObj.pc;
+
+    if (localStream && pc.getSenders().length === 0) {
+      localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
+        console.log(`[RTC ${peerId}] ensured track before offer`, track.kind);
+      });
+    }
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    WS?.send(JSON.stringify({ type: "offer", from: selfId, to: peerId, sdp: offer }));
   }
 
+  // Replace the video sender on every peer. If no transceiver yet (paranoia), create one.
+  function replaceVideoOnAllPeers(newTrack) {
+    peers.forEach((info) => {
+      const { pc } = info;
+      let vTx = info.vTransceiver;
+      if (!vTx) {
+        vTx = pc.addTransceiver("video", { direction: "sendrecv" });
+        info.vTransceiver = vTx;
+      }
+      vTx.sender.replaceTrack(newTrack || null);
+    });
+  }
+
+  // kept for API compatibility
   function replaceVideoTrack(newTrack){
-    peers.forEach(({ pc }) => {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
-      if (sender) sender.replaceTrack(newTrack);
-    });
+    replaceVideoOnAllPeers(newTrack);
   }
 
-function bindDeviceControls() {
-  const micBtn = document.getElementById("btn-mic");
-  const camBtn = document.getElementById("btn-cam");
+  function bindDeviceControls() {
+    const micBtn = document.getElementById("btn-mic");
+    const camBtn = document.getElementById("btn-cam");
 
-  // Initialize button + tracks from stored prefs
-  const camPref = localStorage.getItem("connectly.pref_cam") || "off";
-  const micPref = localStorage.getItem("connectly.pref_mic") || "off";
+    const camPref = localStorage.getItem("connectly.pref_cam");
+    const micPref = localStorage.getItem("connectly.pref_mic");
 
-  if (currentVideoTrack) currentVideoTrack.enabled = camPref === "on";
-  if (currentAudioTrack) currentAudioTrack.enabled = micPref === "on";
+    if (currentVideoTrack && camPref) currentVideoTrack.enabled = (camPref === "on");
+    if (currentAudioTrack && micPref) currentAudioTrack.enabled = (micPref === "on");
 
-  if (camBtn) camBtn.classList.toggle("is-on", camPref === "on");
-  if (micBtn) micBtn.classList.toggle("is-on", micPref === "on");
-  if (camBtn) camBtn.classList.toggle("is-off", camPref === "off");
-  if (micBtn) micBtn.classList.toggle("is-off", micPref === "off");
+    const camOn = !!(currentVideoTrack && currentVideoTrack.enabled);
+    const micOn = !!(currentAudioTrack && currentAudioTrack.enabled);
 
-  // Mic toggle
-  if (micBtn && !micBtn.dataset._rtc) {
-    micBtn.dataset._rtc = "1";
-    micBtn.addEventListener("click", () => {
-      if (!currentAudioTrack) return;
-      const newState = !currentAudioTrack.enabled;
-      currentAudioTrack.enabled = newState;
-      BR.setSelfDeviceFlags({ micOn: newState });
-      localStorage.setItem("connectly.pref_mic", newState ? "on" : "off");
-      micBtn.classList.toggle("is-on", newState);
-      micBtn.classList.toggle("is-off", !newState);
-    });
+    if (camBtn) {
+      camBtn.classList.toggle("is-on", camOn);
+      camBtn.classList.toggle("is-off", !camOn);
+      if (!currentVideoTrack) camBtn.classList.add("disabled");
+    }
+    if (micBtn) {
+      micBtn.classList.toggle("is-on", micOn);
+      micBtn.classList.toggle("is-off", !micOn);
+      if (!currentAudioTrack) micBtn.classList.add("disabled");
+    }
+
+    if (micBtn && !micBtn.dataset._rtc) {
+      micBtn.dataset._rtc = "1";
+      micBtn.addEventListener("click", () => {
+        if (!currentAudioTrack) return;
+        const newState = !currentAudioTrack.enabled;
+        currentAudioTrack.enabled = newState;
+        BR.setSelfDeviceFlags({ micOn: newState });
+        localStorage.setItem("connectly.pref_mic", newState ? "on" : "off");
+        micBtn.classList.toggle("is-on", newState);
+        micBtn.classList.toggle("is-off", !newState);
+      });
+    }
+
+    if (camBtn && !camBtn.dataset._rtc) {
+      camBtn.dataset._rtc = "1";
+      camBtn.addEventListener("click", () => {
+        if (!currentVideoTrack) return;
+        const newState = !currentVideoTrack.enabled;
+        currentVideoTrack.enabled = newState;
+        BR.setSelfDeviceFlags({ camOn: newState });
+        localStorage.setItem("connectly.pref_cam", newState ? "on" : "off");
+        camBtn.classList.toggle("is-on", newState);
+        camBtn.classList.toggle("is-off", !newState);
+      });
+    }
   }
-
-  // Camera toggle
-  if (camBtn && !camBtn.dataset._rtc) {
-    camBtn.dataset._rtc = "1";
-    camBtn.addEventListener("click", () => {
-      if (!currentVideoTrack) return;
-      const newState = !currentVideoTrack.enabled;
-      currentVideoTrack.enabled = newState;
-      BR.setSelfDeviceFlags({ camOn: newState });
-      localStorage.setItem("connectly.pref_cam", newState ? "on" : "off");
-      camBtn.classList.toggle("is-on", newState);
-      camBtn.classList.toggle("is-off", !newState);
-    });
-  }
-}
-
-
 
   function bindShareControl(){
     const shareBtn = document.getElementById("btn-share");
@@ -318,7 +368,12 @@ function bindDeviceControls() {
 
           screenSharing = true;
           shareOwnerId = selfId;
-          replaceVideoTrack(newTrack);
+
+          // replace the dedicated sender on every peer (works even if cam is off)
+          replaceVideoOnAllPeers(newTrack);
+
+          // show the shared screen in our own tile
+          BR.attachStreamTo(selfId, new MediaStream([newTrack]));
 
           WS?.send(JSON.stringify({ type:"screenshare", action:"start", clientId:selfId, name:getName() }));
 
@@ -336,8 +391,15 @@ function bindDeviceControls() {
     if (!screenSharing) return;
     screenSharing = false;
     shareOwnerId = null;
+
     const cam = localStream && localStream.getVideoTracks()[0];
-    if (cam) replaceVideoTrack(cam);
+
+    // put camera back if it exists and is enabled; else stop sending video
+    replaceVideoOnAllPeers((cam && cam.enabled) ? cam : null);
+
+    // switch local tile back to normal local stream
+    BR.attachStreamTo(selfId, localStream);
+
     WS?.send(JSON.stringify({ type:"screenshare", action:"stop", clientId:selfId, name:getName() }));
   }
 

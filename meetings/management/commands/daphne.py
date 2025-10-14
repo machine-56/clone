@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
-import os, subprocess, signal
+import os
+import subprocess
 
 class Command(BaseCommand):
     help = "Run Daphne ASGI server"
@@ -14,4 +15,6 @@ class Command(BaseCommand):
                 "connectly.asgi:application"
             ])
         except KeyboardInterrupt:
-            self.stdout.write(self.style.WARNING("Server stopped."))
+            # Quiet shutdown
+            self.stdout.write(self.style.WARNING("\nServer stopped by keyboard interrupt."))
+
