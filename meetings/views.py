@@ -1,6 +1,6 @@
 import random
 import string
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
 from .models import *
 
@@ -16,24 +16,12 @@ def index(request):
 
 
 def meeting(request, code):
-    meeting_id = code
-    print(f'[meeting]? === meeting id : {meeting_id}')
-    print(f'[meeting] === meeting pwd : {Meeting.objects.get(meeting_code = meeting_id).meeting_pwd}')
+    meeting_obj = get_object_or_404(Meeting, meeting_code=code)
 
-    #? user_allowed = MeetingParticipant.objects.filter(
-    #?     user=request.user,
-    #?     meeting_code=code
-    #? ).exists()
-
-    user_allowed = True  # ? remove later
-    
-    if not user_allowed:
+    if not request.session.get(f"meet_ok:{code}", False):
         return redirect("index")
 
-    meeting_data = Meeting.objects.get(meeting_code = meeting_id)
-
-    print(f'[meeting] === meeting data : {meeting_data}')
-    return render(request, 'meeting.html', {'meeting_data': meeting_data})
+    return render(request, "meeting.html", {"meeting_data": meeting_obj})
 
 
 
@@ -112,6 +100,9 @@ def join_meeting(request):
                 name=name,
                 designation=designation
             )
+
+            request.session[f"meet_ok:{code}"] = True
+            request.session.modified = True
             return JsonResponse({"success": True})
         except Meeting.DoesNotExist:
             return JsonResponse({"success": False, "error": "meeting_not_found"})

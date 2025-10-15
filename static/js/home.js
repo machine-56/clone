@@ -4,7 +4,6 @@ let selectedVideoDevice = null;
 let selectedAudioDevice = null;
 
 document.addEventListener("DOMContentLoaded", function () {
-    // // ---- popover trigger ----
     const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
     popoverTriggerList.forEach(function (popoverTriggerEl) {
         const popover = new bootstrap.Popover(popoverTriggerEl, {
@@ -31,7 +30,6 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
-        // Close when clicking outside
         document.addEventListener("click", function (e) {
             const activePopover = document.querySelector(".popover.show");
             if (!activePopover) return;
@@ -52,7 +50,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
 
-    // // ---- check meeting code (Stage 1) ----
     const joinForm = document.getElementById("joinMeetingForm");
     if (joinForm) {
         joinForm.addEventListener("submit", function (e) {
@@ -79,7 +76,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     if (data.success) {
                         currentMeetingCode = data.meeting_code;
-                        // showToast("Meeting verified, opening preview…", "success");
                         new bootstrap.Modal(document.getElementById("previewModal")).show();
                         initPreview();
                     } else {
@@ -93,7 +89,6 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // // ---- join meeting details (Stage 2) ----
     const detailsForm = document.getElementById("joinMeetingDetails");
     if (detailsForm) {
         detailsForm.addEventListener("submit", function (e) {
@@ -120,7 +115,6 @@ document.addEventListener("DOMContentLoaded", function () {
                         const previewModal = bootstrap.Modal.getInstance(document.getElementById("previewModal"));
                         if (previewModal) previewModal.hide();
                     
-                        //  Save to localStorage so meeting_rtc.js can reuse it
                         localStorage.setItem("connectly.name", document.getElementById("participantName").value);
                         localStorage.setItem("connectly.designation", document.getElementById("participantDesignation").value);
                         localStorage.setItem("connectly.pref_cam", "off");
@@ -140,7 +134,6 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // // ---- device settings modal ----
     const settingsBtn = document.getElementById("openSettings");
     let videoSelect = document.getElementById("videoDeviceSelect");
     let audioSelect = document.getElementById("audioDeviceSelect");
@@ -148,14 +141,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (settingsBtn) {
         settingsBtn.addEventListener("click", async () => {
             const modal = new bootstrap.Modal(document.getElementById("deviceSettingsModal"));
-            await prepareDevices(); // permission + enumerate devices
+            await prepareDevices();
             modal.show();
         });
     }
 
     async function prepareDevices() {
         try {
-            // Minimal request to trigger permissions
             const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
             tempStream.getTracks().forEach(track => track.stop());
         } catch (err) {
@@ -167,14 +159,12 @@ document.addEventListener("DOMContentLoaded", function () {
     async function populateDeviceLists() {
         const devices = await navigator.mediaDevices.enumerateDevices();
 
-        // Clear
         videoSelect.innerHTML = "";
         audioSelect.innerHTML = "";
 
         const videoDevices = devices.filter(d => d.kind === "videoinput");
         const audioDevices = devices.filter(d => d.kind === "audioinput");
 
-        // Video
         if (videoDevices.length === 0) {
             const opt = document.createElement("option");
             opt.disabled = true;
@@ -192,7 +182,6 @@ document.addEventListener("DOMContentLoaded", function () {
             selectedVideoDevice = videoDevices[0].deviceId;
         }
 
-        // Audio
         if (audioDevices.length === 0) {
             const opt = document.createElement("option");
             opt.disabled = true;
@@ -211,7 +200,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    // Save settings → re-run preview
     document.getElementById("saveDeviceSettings").addEventListener("click", () => {
         selectedVideoDevice = videoSelect.value || null;
         selectedAudioDevice = audioSelect.value || null;
@@ -222,10 +210,9 @@ document.addEventListener("DOMContentLoaded", function () {
         const modal = bootstrap.Modal.getInstance(document.getElementById("deviceSettingsModal"));
         modal.hide();
 
-        initPreview(); // re-run preview with new selections
+        initPreview();
     });
 
-    // // ---- video preview + toggles ----
     async function initPreview() {
         const video = document.getElementById("videoPreview");
         const overlay = document.getElementById("videoOffOverlay");
@@ -236,7 +223,6 @@ document.addEventListener("DOMContentLoaded", function () {
         let audioStream = null;
         let cameraAvailable = false;
 
-        // Try video
         try {
             if (selectedVideoDevice) {
                 videoStream = await navigator.mediaDevices.getUserMedia({
@@ -260,7 +246,6 @@ document.addEventListener("DOMContentLoaded", function () {
             showToast("No camera found", "danger");
         }
 
-        // Try audio
         try {
             if (selectedAudioDevice) {
                 audioStream = await navigator.mediaDevices.getUserMedia({
@@ -276,7 +261,6 @@ document.addEventListener("DOMContentLoaded", function () {
             showToast("No microphone found", "danger");
         }
 
-        // Merge streams
         if (videoStream || audioStream) {
             localStream = new MediaStream([
                 ...(videoStream ? videoStream.getTracks() : []),
@@ -284,7 +268,6 @@ document.addEventListener("DOMContentLoaded", function () {
             ]);
         }
 
-        // // ---- toggles ----
         videoBtn.onclick = () => {
             if (!localStream || !cameraAvailable) return;
         
@@ -294,7 +277,6 @@ document.addEventListener("DOMContentLoaded", function () {
         
             setButtonState(videoBtn, track.enabled);
         
-            // overlay
             if (track.enabled) {
                 overlay.classList.add("d-none");
             } else {
@@ -302,7 +284,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 overlay.classList.remove("d-none");
             }
         
-            // icon toggle
             const icon = videoBtn.querySelector("i");
             if (icon) {
                 icon.classList.toggle("fa-video", track.enabled);
@@ -318,7 +299,6 @@ document.addEventListener("DOMContentLoaded", function () {
         
             setButtonState(audioBtn, track.enabled);
         
-            // icon toggle
             const icon = audioBtn.querySelector("i");
             if (icon) {
                 icon.classList.toggle("fa-microphone", track.enabled);
@@ -329,12 +309,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
 
-    // // ---- utility: update button state ----
     function setButtonState(btn, enabled) {
         btn.classList.toggle("enabled", enabled);
         btn.classList.toggle("disabled", !enabled);
 
-        // update icon automatically if button has an <i>
         const icon = btn.querySelector("i");
         if (icon) {
             if (icon.classList.contains("fa-video") || icon.classList.contains("fa-video-slash")) {
@@ -349,7 +327,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
 
-    // // ---- utility: toast ----
     function showToast(message, type) {
         const container = document.getElementById("toastContainer");
         if (!container) return;
@@ -367,7 +344,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
 
-// ---- Instant Meeting ----
 const instantForm = document.getElementById("instantMeetingForm");
 if (instantForm) {
     instantForm.addEventListener("submit", function (e) {
@@ -394,12 +370,10 @@ if (instantForm) {
                 const modal = bootstrap.Modal.getInstance(document.getElementById("instantMeetingModal"));
                 if (modal) modal.hide();
 
-                // write *before* redirect; tiny delay avoids Brave race
                 localStorage.setItem("connectly.name", hostName || "Host");
                 localStorage.setItem("connectly.pref_cam", "off");
                 localStorage.setItem("connectly.pref_mic", "off");
                 localStorage.setItem("meeting.layout", "2");
-                // localStorage.setItem("connectly.is_host", "1");
 
                 currentMeetingCode = data.meeting_code;
 
@@ -417,7 +391,6 @@ if (instantForm) {
     });
 }
 
-// ---- Schedule Meeting ----
 const scheduleForm = document.getElementById("scheduleMeetingForm");
 if (scheduleForm) {
     scheduleForm.addEventListener("submit", function (e) {
@@ -444,14 +417,12 @@ if (scheduleForm) {
                 const scheduleModal = bootstrap.Modal.getInstance(document.getElementById("scheduleMeetingModal"));
                 if (scheduleModal) scheduleModal.hide();
 
-                // Fill credentials modal
                 document.getElementById("credCode").textContent = data.meeting_code;
                 document.getElementById("credPassword").textContent = data.password;
 
                 const credModal = new bootstrap.Modal(document.getElementById("meetingCredentialsModal"));
                 credModal.show();
 
-                // Copy button
                 document.getElementById("copyCredentials").onclick = function () {
                     const text = `Hey join my meeting by using the following:\n\nMeeting code: ${data.meeting_code}\nPassword: ${data.password}`;
                     navigator.clipboard.writeText(text).then(() => {
@@ -459,16 +430,13 @@ if (scheduleForm) {
                     });
                 };
 
-                // "I understood" button
                 document.getElementById("understoodBtn").onclick = function () {
-                    // auto copy easter egg
                     const text = `Hey join my meeting by using the following:\n\nMeeting code: ${data.meeting_code}\nPassword: ${data.password}`;
                     navigator.clipboard.writeText(text);
 
                     const credModalInstance = bootstrap.Modal.getInstance(document.getElementById("meetingCredentialsModal"));
                     if (credModalInstance) credModalInstance.hide();
 
-                    // optional redirect back home
                     window.location.href = "/";
                 };
             } else {

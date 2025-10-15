@@ -15,6 +15,13 @@ class MeetingConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.code = self.scope["url_route"]["kwargs"]["code"]
         self.group_name = f"meet_{self.code}"
+
+        # --- ADDED: gate the socket using the session bit set by join_meeting ---
+        if not self.scope["session"].get(f"meet_ok:{self.code}", False):
+            await self.close()
+            return
+        # ------------------------------------------------------------------------
+
         await self.channel_layer.group_add(self.group_name, self.channel_name)
 
         # In-memory participants map: { group_name: { channel_name: {clientId, name} } }

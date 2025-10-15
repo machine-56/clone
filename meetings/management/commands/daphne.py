@@ -15,6 +15,5 @@ class Command(BaseCommand):
                 "connectly.asgi:application"
             ])
         except KeyboardInterrupt:
-            # Quiet shutdown
             self.stdout.write(self.style.WARNING("\nServer stopped by keyboard interrupt."))
 

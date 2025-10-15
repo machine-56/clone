@@ -1,6 +1,6 @@
 :root {
-  --btn-enabled: #198754;   /* green */
-  --btn-disabled: #6c757d;  /* gray */
+  --btn-enabled: #198754;
+  --btn-disabled: #6c757d;
 }
 
 .main{
@@ -89,7 +89,6 @@
 }
 
 
-/* toggle btn */
 .toggle-btn {
   color: #fff;
   border: none;
@@ -107,7 +106,6 @@
 }
 
 
-/* overkill teansition */
 .transition-overlay {
   position: fixed;
   top: 0; left: 0;
