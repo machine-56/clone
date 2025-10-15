@@ -1,7 +1,7 @@
 // meeting_rtc.js
 // Full-mesh WebRTC signaling over Django Channels.
 
-console.log('------------------------ meeting-rtc.js (new testing 6) ---------------------------');
+console.log('------------------------ meeting-rtc.js (new testing 7) ---------------------------');
 
 (function(){
   const meetingCode = window.location.pathname.split("/")[2];
@@ -22,8 +22,11 @@ console.log('------------------------ meeting-rtc.js (new testing 6) -----------
   let localStream = null;
   let currentVideoTrack = null;
   let currentAudioTrack = null;
+
+  // screenshare state
   let screenSharing = false;
   let shareOwnerId = null;
+  let displayStream = null; // for stopping tracks cleanly
 
   document.addEventListener("DOMContentLoaded", async () => {
     await initLocalMedia();
@@ -89,6 +92,26 @@ console.log('------------------------ meeting-rtc.js (new testing 6) -----------
     }
   }
 
+  // ---------- Small UI helper to keep share buttons honest ----------
+  function setShareBtn(on){
+    const b1 = document.getElementById("btn-share");     // main toggle
+    const b2 = document.getElementById("btn-stopshare");  // optional stop button (if present)
+    [b1, b2].forEach(b => {
+      if (!b) return;
+      b.classList.toggle("is-on", on);
+      b.classList.toggle("is-off", !on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+  }
+  function setShareBtnsDisabled(disabled){
+    const b1 = document.getElementById("btn-share");
+    const b2 = document.getElementById("btn-stopshare");
+    [b1, b2].forEach(b => {
+      if (!b) return;
+      b.classList.toggle("disabled", !!disabled);
+    });
+  }
+
   function connectWS(){
     const proto = location.protocol === "https:" ? "wss" : "ws";
     WS = new WebSocket(`${proto}://${location.host}/ws/meet/${meetingCode}/`);
@@ -114,6 +137,8 @@ console.log('------------------------ meeting-rtc.js (new testing 6) -----------
         list.forEach(({clientId, name}) => {
           if (!clientId || clientId === selfId) return;
           BR.upsertParticipant({ id: clientId, name: name || "Peer" });
+          // ensure we connect to all existing peers
+          if (selfId < clientId) startCall(clientId);
         });
         return;
       }
@@ -157,18 +182,17 @@ console.log('------------------------ meeting-rtc.js (new testing 6) -----------
 
         if (action === "start") {
           shareOwnerId = owner;
-          const shareBtn = document.getElementById("btn-share");
-          if (shareBtn) {
-            if (owner !== selfId) shareBtn.classList.add("disabled");
-            else shareBtn.classList.remove("disabled");
-          }
+          // If someone else is sharing, disable our buttons
+          setShareBtnsDisabled(owner !== selfId);
+          if (owner === selfId) setShareBtn(true);
           BR.toast(`${msg.name || "Someone"} started sharing`);
         }
 
         if (action === "stop") {
           if (shareOwnerId === owner) shareOwnerId = null;
-          const shareBtn = document.getElementById("btn-share");
-          if (shareBtn) shareBtn.classList.remove("disabled");
+          // Re-enable our buttons now that sharing is free
+          setShareBtnsDisabled(false);
+          if (owner === selfId) setShareBtn(false);
           BR.toast(`${msg.name || "Someone"} stopped sharing`);
         }
         return;
@@ -239,7 +263,6 @@ console.log('------------------------ meeting-rtc.js (new testing 6) -----------
     let vTransceiver = pc.getTransceivers().find(t => t.receiver && t.receiver.track && t.receiver.track.kind === "video");
     if (!vTransceiver) {
       vTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
-      // if we already have a camera track, attach it; otherwise keep slot empty
       const cam = localStream && localStream.getVideoTracks()[0];
       vTransceiver.sender.replaceTrack(cam || null);
     }
@@ -351,56 +374,77 @@ console.log('------------------------ meeting-rtc.js (new testing 6) -----------
     }
   }
 
+  // One handler for both "share" and optional "stop share" buttons
   function bindShareControl(){
     const shareBtn = document.getElementById("btn-share");
-    if (!shareBtn || shareBtn.dataset._rtc) return;
-    shareBtn.dataset._rtc = "1";
+    const stopBtn  = document.getElementById("btn-stopshare");
 
-    shareBtn.addEventListener("click", async () => {
-      if (shareOwnerId && shareOwnerId !== selfId) return;
-      const turningOn = shareBtn.classList.contains("is-on");
+    const already = (el) => el && el.dataset._rtc;
 
-      if (turningOn && !screenSharing) {
-        try {
-          const ds = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-          const newTrack = ds.getVideoTracks()[0];
-          if (!newTrack) return;
+    const wire = (el) => {
+      if (!el || already(el)) return;
+      el.dataset._rtc = "1";
+      el.addEventListener("click", toggleShare);
+    };
 
-          screenSharing = true;
-          shareOwnerId = selfId;
+    wire(shareBtn);
+    wire(stopBtn);
+  }
 
-          // replace the dedicated sender on every peer (works even if cam is off)
-          replaceVideoOnAllPeers(newTrack);
+  async function toggleShare(){
+    if (shareOwnerId && shareOwnerId !== selfId) return; // someone else sharing
+    const shareBtn = document.getElementById("btn-share");
+    const isTurningOn = shareBtn?.classList.contains("is-off"); // our UI reflects OFF->ON
 
-          // show the shared screen in our own tile
-          BR.attachStreamTo(selfId, new MediaStream([newTrack]));
+    if (isTurningOn && !screenSharing) {
+      try {
+        displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const newTrack = displayStream.getVideoTracks()[0];
+        if (!newTrack) return;
 
-          WS?.send(JSON.stringify({ type:"screenshare", action:"start", clientId:selfId, name:getName() }));
+        screenSharing = true;
+        shareOwnerId = selfId;
 
-          newTrack.onended = () => { if (screenSharing) stopShare(); };
-        } catch(e) {
-          BR.toast("Screen share failed");
-        }
-      } else {
-        stopShare();
+        // replace the dedicated sender on every peer (works even if cam is off)
+        replaceVideoOnAllPeers(newTrack);
+
+        // show the shared screen in our own tile
+        BR.attachStreamTo(selfId, new MediaStream([newTrack]));
+
+        WS?.send(JSON.stringify({ type:"screenshare", action:"start", clientId:selfId, name:getName() }));
+        setShareBtn(true);
+        setShareBtnsDisabled(false);
+
+        newTrack.onended = () => { if (screenSharing) stopShare(); };
+      } catch(e) {
+        BR.toast("Screen share failed");
       }
-    });
+    } else {
+      stopShare();
+    }
   }
 
   function stopShare(){
     if (!screenSharing) return;
     screenSharing = false;
+    const wasOwner = shareOwnerId === selfId;
     shareOwnerId = null;
+
+    try { displayStream?.getTracks().forEach(t => t.stop()); } catch(_) {}
+    displayStream = null;
 
     const cam = localStream && localStream.getVideoTracks()[0];
 
     // put camera back if it exists and is enabled; else stop sending video
     replaceVideoOnAllPeers((cam && cam.enabled) ? cam : null);
 
-    // switch local tile back to normal local stream
+    // switch local tile back to normal local stream and ensure the stale frame dies
     BR.attachStreamTo(selfId, localStream);
+    setTimeout(() => BR.attachStreamTo(selfId, localStream), 50); // nudge repaint
 
     WS?.send(JSON.stringify({ type:"screenshare", action:"stop", clientId:selfId, name:getName() }));
+    if (wasOwner) setShareBtn(false);
+    setShareBtnsDisabled(false);
   }
 
   function bindHandControl(){

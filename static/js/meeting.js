@@ -28,56 +28,79 @@ window.RTC_BRIDGE = {
     renderAll();
     refreshParticipantsOffcanvas();
   },
-  attachStreamTo(id, stream) {
-    const tile = document.querySelector(`.tile[data-pid="${id}"]`);
-    const mount = tile && tile.querySelector(".media-slot");
-    if (!mount) return;
+attachStreamTo(id, stream) {
+  const tile = document.querySelector(`.tile[data-pid="${id}"]`);
+  const mount = tile && tile.querySelector(".media-slot");
+  if (!mount) return;
 
-    let video = mount.querySelector("video");
-    if (!video) {
-      video = document.createElement("video");
-      video.setAttribute("playsinline", "true");
-      video.setAttribute("autoplay", "true");
-      video.style.width = "100%";
-      video.style.height = "100%";
-      video.style.objectFit = "contain";
-      video.style.background = "transparent";
+  function clearVideo(el) {
+    try { el.pause(); } catch(_) {}
+    el.srcObject = null;
+    el.removeAttribute('srcObject');
+    // Force a repaint so the last frame isn’t shown
+    try { el.load && el.load(); } catch(_) {}
+  }
 
-      const isSelf = !!State.participants.find(p => p.id === id && p.self);
-      if (isSelf) video.muted = true;
-
-      mount.appendChild(video);
-    }
-    video.srcObject = stream;
-
-    const ensurePlay = () => { try { video.play(); } catch (_) {} };
-    (video.readyState >= 2) ? ensurePlay() : video.onloadedmetadata = ensurePlay;
+  let video = mount.querySelector("video");
+  if (!video) {
+    video = document.createElement("video");
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("autoplay", "true");
+    video.style.width = "100%";
+    video.style.height = "100%";
+    video.style.objectFit = "contain";
+    video.style.background = "transparent";
 
     const isSelf = !!State.participants.find(p => p.id === id && p.self);
-    if (!isSelf) {
-      let audio = mount.querySelector("audio");
-      if (!audio) {
-        audio = document.createElement("audio");
-        audio.autoplay = true;
-        mount.appendChild(audio);
-      }
-      audio.srcObject = stream;
-    }
+    if (isSelf) video.muted = true;
 
-    const vtrack = stream.getVideoTracks()[0];
-    const updateCamClass = () => {
-      if (!tile) return;
-      const on = vtrack && vtrack.enabled && stream.getVideoTracks().length > 0;
-      tile.classList.toggle("cam-on", !!on);
-    };
-    updateCamClass();
-    if (vtrack) {
-      vtrack.onmute = updateCamClass;
-      vtrack.onunmute = updateCamClass;
-      vtrack.onended = updateCamClass;
-      vtrack.addEventListener("ended", updateCamClass);
+    mount.appendChild(video);
+  }
+
+  // Attach stream
+  video.srcObject = stream;
+  const ensurePlay = () => { try { video.play(); } catch (_) {} };
+  (video.readyState >= 2) ? ensurePlay() : (video.onloadedmetadata = ensurePlay);
+
+  // Attach audio element for remote peers
+  const isSelf = !!State.participants.find(p => p.id === id && p.self);
+  if (!isSelf) {
+    let audio = mount.querySelector("audio");
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.autoplay = true;
+      mount.appendChild(audio);
     }
-  },
+    audio.srcObject = stream;
+  }
+
+  // Update tile class and clear frame on end/mute
+  const vtrack = stream.getVideoTracks()[0];
+
+  const updateCamClass = () => {
+    if (!tile) return;
+    const on = vtrack && vtrack.enabled && !vtrack.muted && stream.getVideoTracks().length > 0;
+    tile.classList.toggle("cam-on", !!on);
+    if (!on) {
+      // If track is gone or muted, clear the frozen frame
+      clearVideo(video);
+    }
+  };
+
+  updateCamClass();
+  if (vtrack) {
+    vtrack.onmute = updateCamClass;
+    vtrack.onunmute = () => {
+      // re-attach so playback resumes
+      video.srcObject = stream;
+      ensurePlay();
+      updateCamClass();
+    };
+    vtrack.onended = updateCamClass;
+    vtrack.addEventListener("ended", updateCamClass);
+  }
+},
+
 
   // simplified: do NOT re-render on toggles
   setSelfDeviceFlags({ camOn, micOn }) {
