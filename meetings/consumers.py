@@ -1,30 +1,20 @@
-# meetings/consumers.py
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 from .models import Meeting
 
 class MeetingConsumer(AsyncWebsocketConsumer):
-    """
-    Minimal, robust signaling hub.
-    - Tracks participants per meeting group (in-memory map on channel_layer).
-    - Broadcasts join/leave + chat + WebRTC SDP/ICE.
-    - Sends a full participant list to each newly joined client.
-    """
 
     async def connect(self):
         self.code = self.scope["url_route"]["kwargs"]["code"]
         self.group_name = f"meet_{self.code}"
 
-        # --- ADDED: gate the socket using the session bit set by join_meeting ---
         if not self.scope["session"].get(f"meet_ok:{self.code}", False):
             await self.close()
             return
-        # ------------------------------------------------------------------------
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
 
-        # In-memory participants map: { group_name: { channel_name: {clientId, name} } }
         if not hasattr(self.channel_layer, "participants"):
             self.channel_layer.participants = {}
         self.channel_layer.participants.setdefault(self.group_name, {})
@@ -32,7 +22,6 @@ class MeetingConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        # Remove from participants and broadcast leave
         group_participants = self.channel_layer.participants.get(self.group_name, {})
         info = group_participants.pop(self.channel_name, None)
 
@@ -54,16 +43,13 @@ class MeetingConsumer(AsyncWebsocketConsumer):
         msg = json.loads(text_data or "{}")
         t = msg.get("type")
 
-        # ---- presence / join -------------------------------------------------
         if t == "presence":
             client_id = msg.get("clientId")
             name = (msg.get("name") or "Peer").strip() or "Peer"
 
-            # Track participant under this channel
             group_participants = self.channel_layer.participants.setdefault(self.group_name, {})
             group_participants[self.channel_name] = {"clientId": client_id, "name": name}
 
-            # If host joins for the first time, mark meeting started
             if msg.get("is_host"):
                 try:
                     mt = Meeting.objects.get(meeting_code=self.code)
@@ -74,7 +60,6 @@ class MeetingConsumer(AsyncWebsocketConsumer):
                 except Meeting.DoesNotExist:
                     pass
 
-            # Send full participant list to the new client (by clientId + name)
             participants_payload = [
                 v for _, v in group_participants.items()
             ]
@@ -87,7 +72,6 @@ class MeetingConsumer(AsyncWebsocketConsumer):
                 )
             )
 
-            # Tell everyone else that this person arrived
             await self.channel_layer.group_send(
                 self.group_name,
                 {
@@ -100,9 +84,7 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             )
             return
 
-        # ---- leave (explicit) -----------------------------------------------
         if t == "leave":
-            # Client may proactively notify before unload; remove and fan out
             group_participants = self.channel_layer.participants.get(self.group_name, {})
             info = group_participants.pop(self.channel_name, None)
             if info:
@@ -118,37 +100,30 @@ class MeetingConsumer(AsyncWebsocketConsumer):
                 )
             return
 
-        # ---- chat ------------------------------------------------------------
         if t == "chat":
             await self.channel_layer.group_send(
                 self.group_name, {"type": "chat.broadcast", "payload": msg}
             )
             return
 
-        # ---- hand raise ------------------------------------------------------
         if t == "hand":
             await self.channel_layer.group_send(
                 self.group_name, {"type": "hand.broadcast", "payload": msg}
             )
             return
 
-        # ---- screenshare (start/stop) ---------------------------------------
         if t == "screenshare":
-            # payload: { type:"screenshare", action:"start"|"stop", clientId, name }
             await self.channel_layer.group_send(
                 self.group_name, {"type": "screenshare.broadcast", "payload": msg}
             )
             return
 
-        # ---- WebRTC signaling ------------------------------------------------
         if t in ("offer", "answer", "candidate"):
-            # Broadcast; clients filter by {to}
             await self.channel_layer.group_send(
                 self.group_name, {"type": "signal.broadcast", "payload": msg}
             )
             return
 
-        # ---- end meeting (host) ---------------------------------------------
         if t == "end_meeting":
             try:
                 mt = Meeting.objects.get(meeting_code=self.code)
@@ -162,7 +137,6 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             )
             return
 
-    # ---- Fan-out handlers ----------------------------------------------------
 
     async def presence_join(self, event):
         await self.send(text_data=json.dumps({"type": "presence", **event["payload"]}))

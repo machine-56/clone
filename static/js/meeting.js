@@ -1,9 +1,4 @@
-// meeting.js
-// UI + layout + minimal plumbing. No networking here.
-// RTC code plugs in via window.RTC_BRIDGE and window.ChatSendAdapter.
-console.log('------------------------ meeting.js (fixed version) ---------------------------');
 
-// ---------- Config / State ----------
 const State = {
   HostName: localStorage.getItem("connectly.name") || (window.CONNECTLY && window.CONNECTLY.host_name) || "Host",
   tilesPerPage: 1,
@@ -14,7 +9,6 @@ const State = {
   currentLayout: Number(localStorage.getItem("meeting.layout") || 1),
 };
 
-// ---------- RTC Bridge ----------
 window.RTC_BRIDGE = {
   upsertParticipant(p) {
     const i = State.participants.findIndex((x) => x.id === p.id);
@@ -49,12 +43,10 @@ window.RTC_BRIDGE = {
       mount.appendChild(video);
     }
 
-    // Attach stream to video
     video.srcObject = stream;
     const ensurePlay = () => { try { video.play(); } catch (_) {} };
     (video.readyState >= 2) ? ensurePlay() : (video.onloadedmetadata = ensurePlay);
 
-    // Attach audio for remote peers
     const isSelf = !!State.participants.find(p => p.id === id && p.self);
     if (!isSelf) {
       let audio = mount.querySelector("audio");
@@ -66,8 +58,6 @@ window.RTC_BRIDGE = {
       audio.srcObject = stream;
     }
 
-    // === Key fix: force tile .cam-on when an active video track is present,
-    // even if p.cam is "off" (e.g., cam off but screen sharing on).
     const vtrack = stream.getVideoTracks()[0];
 
     const updateCamClass = () => {
@@ -85,7 +75,6 @@ window.RTC_BRIDGE = {
     }
   },
 
-  // simplified: do NOT re-render on toggles
   setSelfDeviceFlags({ camOn, micOn }) {
     const self = State.participants.find((p) => p.self);
     if (self) {
@@ -107,7 +96,6 @@ window.RTC_BRIDGE = {
 
 window.ChatSendAdapter = window.ChatSendAdapter || null;
 
-// ---------- Bootstrap ----------
 document.addEventListener("DOMContentLoaded", () => {
   initAbout();
   initMorePopover();
@@ -120,13 +108,11 @@ document.addEventListener("DOMContentLoaded", () => {
   wireGlobalActivity();
 });
 
-// ---------- About modal ----------
 function initAbout() {
   const hostEl = document.getElementById("about-host");
   if (hostEl) hostEl.textContent = State.HostName;
 }
 
-// ---------- Grid render ----------
 function renderAll(layout = State.currentLayout || 1) {
   const perPage = layout * layout;
   const chunks = chunk(State.participants, perPage);
@@ -146,7 +132,6 @@ function renderAll(layout = State.currentLayout || 1) {
 
   renderIndicators(chunks.length);
 
-  // reattach self stream if layout rebuilt
   if (window.RTC_BRIDGE && typeof window.RTC_BRIDGE.attachStreamTo === "function") {
     const self = State.participants.find(p => p.self);
     if (self && window.localStream) {
@@ -208,7 +193,6 @@ function gotoSlide(idx) {
   carousel.to(idx);
 }
 
-// ---------- Popover ----------
 function initMorePopover() {
   const btn = document.getElementById("btn-more");
   if (!btn) return;
@@ -233,7 +217,6 @@ function initMorePopover() {
   });
 }
 
-// ---------- Controls ----------
 function initControls() {
   bindToggle("btn-mic", "mic");
   bindToggle("btn-cam", "cam");
@@ -284,7 +267,6 @@ function bindToggle(id, key) {
   });
 }
 
-// ---------- Layout modal ----------
 function applyLayout(layout) {
   const root = document.getElementById("carousel-inner");
   if (!root) return;
@@ -333,7 +315,6 @@ function initLayoutModal() {
   }
 }
 
-// ---------- Participants offcanvas ----------
 function initParticipantsOffcanvas() { refreshParticipantsOffcanvas(); }
 function refreshParticipantsOffcanvas() {
   const ul = document.getElementById("participants-list");
@@ -347,7 +328,6 @@ function refreshParticipantsOffcanvas() {
   });
 }
 
-// ---------- Chat ----------
 function initChat() {
   const sendBtn = document.getElementById("chat-send");
   const input = document.getElementById("chat-input");
@@ -394,7 +374,6 @@ function pushChat(msg) {
   log.scrollTop = log.scrollHeight;
 }
 
-// ---------- Idle controls fade ----------
 function initIdleFade() { resetIdleTimer(); }
 function wireGlobalActivity() {
   ["mousemove", "mousedown", "keydown", "touchstart", "wheel"].forEach((evt) => {
@@ -420,7 +399,6 @@ function showControls() {
   State.ctrlVisible = true;
 }
 
-// ---------- Helpers ----------
 function chunk(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));

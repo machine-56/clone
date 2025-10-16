@@ -71,30 +71,40 @@ def admin_meeting_detail(request, mid):
 
 def verify_meeting(request):
     if request.method == "POST":
+        print("[verify_meeting] called")
         payload = json.loads(request.body.decode("utf-8"))
+        print("[verify_meeting] payload:", payload)
         code = payload.get("meeting_code")
         password = payload.get("password")
+        print(f"[verify_meeting] checking meeting {code} with password {password}")
 
         try:
             meeting = Meeting.objects.get(meeting_code=code, meeting_pwd=password)
+            print(f"[verify_meeting] success: meeting verified ({meeting})")
             return JsonResponse({"success": True, "meeting_code": meeting.meeting_code})
         except Meeting.DoesNotExist:
+            print("[verify_meeting] error: meeting not found or invalid credentials")
             return JsonResponse({"success": False, "error": "invalid_credentials"})
+    print("[verify_meeting] invalid method")
     return JsonResponse({"success": False, "error": "invalid_method"}, status=405)
 
 
 def join_meeting(request):
     if request.method == "POST":
+        print("[join_meeting] called")
         payload = json.loads(request.body.decode("utf-8"))
+        print("[join_meeting] payload:", payload)
         code = payload.get("meeting_code")
         name = payload.get("name")
         designation = payload.get("designation")
+        print(f"[join_meeting] meeting={code}, name={name}, designation={designation}")
 
         if not (code and name and designation):
             return JsonResponse({"success": False, "error": "missing_fields"})
 
         try:
             meeting = Meeting.objects.get(meeting_code=code)
+            print("[join_meeting] meeting found, creating participant entry")
             Participant.objects.create(
                 meeting=meeting,
                 name=name,
@@ -103,8 +113,10 @@ def join_meeting(request):
 
             request.session[f"meet_ok:{code}"] = True
             request.session.modified = True
+            print("[join_meeting] participant added, session updated")
             return JsonResponse({"success": True})
         except Meeting.DoesNotExist:
+            print("[join_meeting] error: meeting not found")
             return JsonResponse({"success": False, "error": "meeting_not_found"})
     return JsonResponse({"success": False, "error": "invalid_method"}, status=405)
 
@@ -125,6 +137,16 @@ def start_instant_meeting(request):
             meeting_pwd=pwd,
             started_on=timezone.now()
         )
+        print(f'[instant meeting] = {meeting}')
+        Participant.objects.create(
+            meeting=meeting,
+            name=name,
+            designation=designation
+        )
+
+        request.session[f"meet_ok:{code}"] = True
+        request.session.modified = True
+        print("[join_meeting] participant added, session updated")
 
         return JsonResponse({"success": True, "meeting_code": meeting.meeting_code, "password": meeting.meeting_pwd})
     return JsonResponse({"success": False, "error": "invalid_request"}, status=400)

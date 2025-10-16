@@ -1,7 +1,3 @@
-// meeting_rtc.js
-// Full-mesh WebRTC signaling over Django Channels.
-
-console.log('------------------------ meeting-rtc.js (new testing 7) ---------------------------');
 
 (function(){
   const meetingCode = window.location.pathname.split("/")[2];
@@ -17,13 +13,11 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
   let WS = null;
 
-  // peers map stores: { pc, vTransceiver }
   const peers = new Map();
   let localStream = null;
   let currentVideoTrack = null;
   let currentAudioTrack = null;
 
-  // screenshare state
   let screenSharing = false;
   let shareOwnerId = null;
   let displayStream = null;
@@ -93,10 +87,9 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
     }
   }
 
-  // ---------- Small UI helper to keep share buttons honest ----------
   function setShareBtn(on){
-    const b1 = document.getElementById("btn-share");     // main toggle
-    const b2 = document.getElementById("btn-stopshare");  // optional stop button (if present)
+    const b1 = document.getElementById("btn-share");
+    const b2 = document.getElementById("btn-stopshare");
     [b1, b2].forEach(b => {
       if (!b) return;
       b.classList.toggle("is-on", on);
@@ -138,7 +131,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
         list.forEach(({clientId, name}) => {
           if (!clientId || clientId === selfId) return;
           BR.upsertParticipant({ id: clientId, name: name || "Peer" });
-          // ensure we connect to all existing peers
           if (selfId < clientId) startCall(clientId);
         });
         return;
@@ -183,7 +175,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
 
         if (action === "start") {
           shareOwnerId = owner;
-          // If someone else is sharing, disable our buttons
           setShareBtnsDisabled(owner !== selfId);
           if (owner === selfId) setShareBtn(true);
           BR.toast(`${msg.name || "Someone"} started sharing`);
@@ -191,7 +182,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
 
         if (action === "stop") {
           if (shareOwnerId === owner) shareOwnerId = null;
-          // Re-enable our buttons now that sharing is free
           setShareBtnsDisabled(false);
           if (owner === selfId) setShareBtn(false);
           BR.toast(`${msg.name || "Someone"} stopped sharing`);
@@ -211,7 +201,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
         const peerObj = ensurePeer(from);
         const pc = peerObj.pc;
 
-        // make sure we advertise what we might send back
         if (localStream && pc.getSenders().length === 0) {
           localStream.getTracks().forEach(track => {
             pc.addTrack(track, localStream);
@@ -251,7 +240,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    // add whatever local tracks exist (audio/cam)
     if (localStream) {
       localStream.getTracks().forEach(track => {
         pc.addTrack(track, localStream);
@@ -259,8 +247,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
       });
     }
 
-    // ensure a dedicated VIDEO TRANSCIEVER always exists for replaceTrack later
-    // this avoids renegotiation when camera is off at share time
     let vTransceiver = pc.getTransceivers().find(t => t.receiver && t.receiver.track && t.receiver.track.kind === "video");
     if (!vTransceiver) {
       vTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
@@ -306,7 +292,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
     WS?.send(JSON.stringify({ type: "offer", from: selfId, to: peerId, sdp: offer }));
   }
 
-  // Replace the video sender on every peer. If no transceiver yet (paranoia), create one.
   function replaceVideoOnAllPeers(newTrack) {
     peers.forEach((info) => {
       const { pc } = info;
@@ -319,7 +304,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
     });
   }
 
-  // kept for API compatibility
   function replaceVideoTrack(newTrack){
     replaceVideoOnAllPeers(newTrack);
   }
@@ -375,7 +359,6 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
     }
   }
 
-  // One handler for both "share" and optional "stop share" buttons
   function bindShareControl(){
     const shareBtn = document.getElementById("btn-share");
     const stopBtn  = document.getElementById("btn-stopshare");
@@ -407,10 +390,8 @@ console.log('------------------------ meeting-rtc.js (new testing 7) -----------
         screenSharing = true;
         shareOwnerId = selfId;
 
-        // replace the dedicated sender on every peer (works even if cam is off)
         replaceVideoOnAllPeers(newTrack);
 
-        // show the shared screen in our own tile
         BR.attachStreamTo(selfId, new MediaStream([newTrack]));
 
         WS?.send(JSON.stringify({ type:"screenshare", action:"start", clientId:selfId, name:getName() }));
@@ -441,15 +422,12 @@ function stopShare(){
   const cam = localStream && localStream.getVideoTracks()[0];
   const camWasOn = !!(cam && cam.enabled);
 
-  // Restore what peers should see
   replaceVideoOnAllPeers(camWasOn ? cam : null);
 
-  // Restore or clear the local tile deterministically
   if (camWasOn) {
     BR.attachStreamTo(selfId, localStream);
     BR.setSelfDeviceFlags({ camOn: true });
   } else {
-    // force-remove the last shared frame in the tile
     BR.attachStreamTo(selfId, new MediaStream());
     BR.setSelfDeviceFlags({ camOn: false });
   }
