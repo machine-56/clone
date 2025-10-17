@@ -1,0 +1,28 @@
+# Core Django and ASGI
+django>=5.0,<6.0
+channels>=4.0
+daphne>=4.1
+
+# Redis backend for Channels
+channels-redis>=4.1
+redis>=5.0
+
+# Database (MySQL)
+mysqlclient>=2.2
+
+# Utility / optional dependencies
+asgiref>=3.8
+sqlparse>=0.5
+
+# For deployment (if needed)
+gunicorn>=22.0
+whitenoise>=6.6
+
+# Environment management (optional, good practice)
+python-dotenv>=1.0
+
+# For static/media handling and Pillow image support if needed
+pillow>=10.0
+
+
+dj-database-url
