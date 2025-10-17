@@ -51,7 +51,7 @@ const ICE_SERVERS = [
 
     window.ChatSendAdapter = (text, pushLocalCb) => {
       const name = getName();
-      WS?.send(JSON.stringify({ type:"chat", name, text }));
+      safeSend({ type:"chat", name, text });
     };
   });
 
@@ -309,6 +309,15 @@ const ICE_SERVERS = [
     await pc.setLocalDescription(offer);
     WS?.send(JSON.stringify({ type: "offer", from: selfId, to: peerId, sdp: offer }));
   }
+
+function safeSend(data) {
+  if (WS && WS.readyState === WebSocket.OPEN) {
+    WS.send(JSON.stringify(data));
+  } else {
+    console.warn("WebSocket not open, dropping:", data);
+  }
+}
+
 
   function replaceVideoOnAllPeers(newTrack) {
     peers.forEach((info) => {
