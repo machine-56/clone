@@ -15,7 +15,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'unsafe-default-key')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['clone-o47s.onrender.com', 'localhost',]
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
