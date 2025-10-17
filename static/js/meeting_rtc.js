@@ -10,7 +10,25 @@
   const selfId = Math.random().toString(36).slice(2);
   sessionStorage.setItem(MKEY("clientId"), selfId);
 
-  const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+
+  // Free TURN relay (works for testing; slow but reliable)
+  {
+    urls: "turn:relay1.expressturn.com:3478",
+    username: "efree",
+    credential: "efree"
+  },
+
+  // Optional backup TURN (Metered)
+  {
+    urls: "turn:relay.metered.ca:80",
+    username: "openai",
+    credential: "openai"
+  }
+];
+
   let WS = null;
 
   const peers = new Map();
