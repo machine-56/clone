@@ -32,18 +32,31 @@ window.RTC_BRIDGE = {
       video = document.createElement("video");
       video.setAttribute("playsinline", "true");
       video.setAttribute("autoplay", "true");
-      video.style.width = "100%";
-      video.style.height = "100%";
+      video.className = "w-100 h-100 d-flex align-items-center justify-content-center";
       video.style.objectFit = "contain";
-      video.style.background = "transparent";
-
+      video.style.display = "block";
+      video.style.margin = "auto";
+      video.style.backgroundColor = "#000"; // neutral base
+      video.style.borderRadius = "4px";
+    
       const isSelfCreate = !!State.participants.find(p => p.id === id && p.self);
       if (isSelfCreate) video.muted = true;
-
+    
+      mount.classList.add("d-flex", "align-items-center", "justify-content-center");
       mount.appendChild(video);
     }
 
+
     video.srcObject = stream;
+    const vtrack = stream.getVideoTracks()[0];
+    if (!vtrack) {
+      video.style.backgroundColor = "#222";
+      video.style.objectFit = "cover";
+    } else {
+      video.style.backgroundColor = "transparent";
+      video.style.objectFit = "contain";
+    }
+
     const ensurePlay = () => { try { video.play(); } catch (_) {} };
     (video.readyState >= 2) ? ensurePlay() : (video.onloadedmetadata = ensurePlay);
 
@@ -58,7 +71,6 @@ window.RTC_BRIDGE = {
       audio.srcObject = stream;
     }
 
-    const vtrack = stream.getVideoTracks()[0];
 
     const updateCamClass = () => {
       if (!tile) return;

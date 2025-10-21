@@ -402,56 +402,47 @@ function safeSend(data) {
     wire(stopBtn);
   }
 
-  async function toggleShare(){
-    if (shareOwnerId && shareOwnerId !== selfId) return;
-      if (sharingInProgress) return;
-      
-      const isTurningOn = !screenSharing;
-      if (isTurningOn) {
-        sharingInProgress = true;
-      try {
-        displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        const newTrack = displayStream.getVideoTracks()[0];
-        if (!newTrack) return;
+async function toggleShare() {
+  if (shareOwnerId && shareOwnerId !== selfId) return;
 
-        screenSharing = true;
-        shareOwnerId = selfId;
+  if (!screenSharing) {
+    try {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const track = displayStream.getVideoTracks()[0];
 
-        replaceVideoOnAllPeers(newTrack);
+      if (!track) return;
 
-        BR.attachStreamTo(selfId, new MediaStream([newTrack]));
+      screenSharing = true;
+      shareOwnerId = selfId;
 
-        WS?.send(JSON.stringify({ type:"screenshare", action:"start", clientId:selfId, name:getName() }));
-        setShareBtn(true);
-        setShareBtnsDisabled(false);
+      replaceVideoOnAllPeers(track);
+      BR.attachStreamTo(selfId, new MediaStream([track]));
+      WS?.send(JSON.stringify({ type: "screenshare", action: "start", clientId: selfId, name: getName() }));
 
-        newTrack.onended = () => { if (screenSharing) stopShare(); };
-      } catch(e) {
-        BR.toast("Screen share failed");
-      }
-      finally {
-       sharingInProgress = false;
-     }
-    } else {
-      stopShare();
+      track.onended = () => stopShare();
+    } catch (err) {
+      BR.toast("Screen share failed");
     }
+  } else {
+    stopShare();
   }
+}
 
-function stopShare(){
+function stopShare() {
   if (!screenSharing) return;
+
   screenSharing = false;
   const wasOwner = shareOwnerId === selfId;
   shareOwnerId = null;
 
-  try { displayStream?.getTracks().forEach(t => t.stop()); } catch(_) {}
+  try { displayStream?.getTracks().forEach(t => t.stop()); } catch (_) {}
   displayStream = null;
 
-  const cam = localStream && localStream.getVideoTracks()[0];
-  const camWasOn = !!(cam && cam.enabled);
+  const camTrack = localStream?.getVideoTracks()[0] || null;
+  replaceVideoOnAllPeers(camTrack);
 
-  replaceVideoOnAllPeers(camWasOn ? cam : null);
-
-  if (camWasOn) {
+  // if camera is on, restore it; otherwise blank tile
+  if (camTrack && camTrack.enabled) {
     BR.attachStreamTo(selfId, localStream);
     BR.setSelfDeviceFlags({ camOn: true });
   } else {
@@ -459,10 +450,9 @@ function stopShare(){
     BR.setSelfDeviceFlags({ camOn: false });
   }
 
-  WS?.send(JSON.stringify({ type:"screenshare", action:"stop", clientId:selfId, name:getName() }));
-  if (wasOwner) setShareBtn(false);
-  setShareBtnsDisabled(false);
+  if (wasOwner) WS?.send(JSON.stringify({ type: "screenshare", action: "stop", clientId: selfId, name: getName() }));
 }
+
 
 
   function bindHandControl(){
