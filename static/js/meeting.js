@@ -154,11 +154,11 @@ function renderAll(layout = State.currentLayout || 1) {
 
 function renderTile(p) {
   const tile = document.createElement("div");
-  tile.className = "tile" + (p.cam === "on" ? " cam-on" : "");
+  tile.className = "tile d-flex align-items-center justify-content-center w-100" + (p.cam === "on" ? " cam-on" : "");
   tile.dataset.pid = p.id;
 
   const ratio = document.createElement("div");
-  ratio.className = "ratio";
+  ratio.className = "ratio d-flex align-items-center justify-content-center";
   ratio.style.setProperty("--bs-aspect-ratio", getAspectRatio());
 
   const slot = document.createElement("div");
