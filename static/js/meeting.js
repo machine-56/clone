@@ -22,70 +22,77 @@ window.RTC_BRIDGE = {
     renderAll();
     refreshParticipantsOffcanvas();
   },
-  attachStreamTo(id, stream) {
-    const tile = document.querySelector(`.tile[data-pid="${id}"]`);
-    const mount = tile && tile.querySelector(".media-slot");
-    if (!mount) return;
 
-    let video = mount.querySelector("video");
-    if (!video) {
-      video = document.createElement("video");
-      video.setAttribute("playsinline", "true");
-      video.setAttribute("autoplay", "true");
-      video.className = "w-100 h-100 d-flex align-items-center justify-content-center";
-      video.style.objectFit = "contain";
-      video.style.display = "block";
-      video.style.margin = "auto";
-      video.style.backgroundColor = "#000"; // neutral base
-      video.style.borderRadius = "4px";
-    
-      const isSelfCreate = !!State.participants.find(p => p.id === id && p.self);
-      if (isSelfCreate) video.muted = true;
-    
-      mount.classList.add("d-flex", "align-items-center", "justify-content-center");
-      mount.appendChild(video);
+attachStreamTo(id, stream) {
+  const tile = document.querySelector(`.tile[data-pid="${id}"]`);
+  const mount = tile && tile.querySelector(".media-slot");
+  if (!mount) return;
+
+  let video = mount.querySelector("video");
+  if (!video) {
+    video = document.createElement("video");
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("autoplay", "true");
+    video.className = "w-100 h-100 d-flex align-items-center justify-content-center";
+    video.style.objectFit = "contain";
+    video.style.display = "block";
+    video.style.margin = "auto";
+    video.style.backgroundColor = "#000";
+    video.style.borderRadius = "4px";
+
+    const isSelfCreate = !!State.participants.find(p => p.id === id && p.self);
+    if (isSelfCreate) video.muted = true;
+
+    mount.classList.add("d-flex", "align-items-center", "justify-content-center");
+    mount.appendChild(video);
+  }
+
+  // Always wire audio for non-self participants
+  const isSelf = !!State.participants.find(p => p.id === id && p.self);
+  if (!isSelf) {
+    let audio = mount.querySelector("audio");
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.autoplay = true;
+      mount.appendChild(audio);
     }
+    audio.srcObject = stream;
+  }
 
+  const vtrack = stream.getVideoTracks()[0];
 
+  if (vtrack) {
+    // Normal case: there is video → play it
+    video.style.backgroundColor = "transparent";
+    video.style.objectFit = "contain";
     video.srcObject = stream;
-    const vtrack = stream.getVideoTracks()[0];
-    if (!vtrack) {
-      video.style.backgroundColor = "#222";
-      video.style.objectFit = "cover";
-    } else {
-      video.style.backgroundColor = "transparent";
-      video.style.objectFit = "contain";
-    }
-
     const ensurePlay = () => { try { video.play(); } catch (_) {} };
     (video.readyState >= 2) ? ensurePlay() : (video.onloadedmetadata = ensurePlay);
+  } else {
+    // Blank case: forcefully clear last frame
+    try { video.pause(); } catch (_) {}
+    video.srcObject = null;            // critical to avoid frozen frame
+    try { video.load && video.load(); } catch (_) {}
+    video.style.backgroundColor = "#222";
+    video.style.objectFit = "cover";
+  }
 
-    const isSelf = !!State.participants.find(p => p.id === id && p.self);
-    if (!isSelf) {
-      let audio = mount.querySelector("audio");
-      if (!audio) {
-        audio = document.createElement("audio");
-        audio.autoplay = true;
-        mount.appendChild(audio);
-      }
-      audio.srcObject = stream;
-    }
+  // Cam-on class toggling
+  const hasVideo = !!(vtrack && stream.getVideoTracks().length > 0 && vtrack.enabled);
+  if (tile) tile.classList.toggle("cam-on", hasVideo);
 
-
+  if (vtrack) {
     const updateCamClass = () => {
-      if (!tile) return;
-      const hasVideo = !!(vtrack && stream.getVideoTracks().length > 0 && vtrack.enabled);
-      tile.classList.toggle("cam-on", hasVideo);
+      const hv = !!(vtrack && vtrack.enabled);
+      if (tile) tile.classList.toggle("cam-on", hv);
     };
+    vtrack.onmute = updateCamClass;
+    vtrack.onunmute = updateCamClass;
+    vtrack.onended = updateCamClass;
+    vtrack.addEventListener("ended", updateCamClass);
+  }
+},
 
-    updateCamClass();
-    if (vtrack) {
-      vtrack.onmute = updateCamClass;
-      vtrack.onunmute = updateCamClass;
-      vtrack.onended = updateCamClass;
-      vtrack.addEventListener("ended", updateCamClass);
-    }
-  },
 
   setSelfDeviceFlags({ camOn, micOn }) {
     const self = State.participants.find((p) => p.self);

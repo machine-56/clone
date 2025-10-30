@@ -203,7 +203,10 @@ const ICE_SERVERS = [
           setShareBtnsDisabled(false);
           if (owner === selfId) setShareBtn(false);
           BR.toast(`${msg.name || "Someone"} stopped sharing`);
+                
+          return;
         }
+
         return;
       }
 
@@ -371,19 +374,33 @@ function safeSend(data) {
         micBtn.classList.toggle("is-off", !newState);
       });
     }
-
+    
+    
     if (camBtn && !camBtn.dataset._rtc) {
       camBtn.dataset._rtc = "1";
       camBtn.addEventListener("click", () => {
         if (!currentVideoTrack) return;
+    
         const newState = !currentVideoTrack.enabled;
         currentVideoTrack.enabled = newState;
+    
         BR.setSelfDeviceFlags({ camOn: newState });
         localStorage.setItem("connectly.pref_cam", newState ? "on" : "off");
         camBtn.classList.toggle("is-on", newState);
         camBtn.classList.toggle("is-off", !newState);
+    
+        // Self: only update when not sharing (screenshare has priority)
+        if (!screenSharing) {
+          BR.attachStreamTo(selfId, newState ? localStream : new MediaStream());
+        }
+    
+        // Peers: when not sharing, actually swap the outbound video sender
+        if (!screenSharing) {
+          replaceVideoOnAllPeers(newState ? currentVideoTrack : null);
+        }
       });
     }
+  
   }
 
   function bindShareControl(){
@@ -439,9 +456,11 @@ function stopShare() {
   displayStream = null;
 
   const camTrack = localStream?.getVideoTracks()[0] || null;
-  replaceVideoOnAllPeers(camTrack);
 
-  // if camera is on, restore it; otherwise blank tile
+  // Only push camera if it's enabled; otherwise push null so peers don't see a frozen frame
+  replaceVideoOnAllPeers(camTrack && camTrack.enabled ? camTrack : null);
+
+  // Self tile: camera if on, otherwise blank
   if (camTrack && camTrack.enabled) {
     BR.attachStreamTo(selfId, localStream);
     BR.setSelfDeviceFlags({ camOn: true });
@@ -450,7 +469,14 @@ function stopShare() {
     BR.setSelfDeviceFlags({ camOn: false });
   }
 
-  if (wasOwner) WS?.send(JSON.stringify({ type: "screenshare", action: "stop", clientId: selfId, name: getName() }));
+  if (wasOwner) {
+    WS?.send(JSON.stringify({
+      type: "screenshare",
+      action: "stop",
+      clientId: selfId,
+      name: getName()
+    }));
+  }
 }
 
 
